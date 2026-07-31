@@ -1,0 +1,9 @@
+<div class="lb-header-actions">
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+</div>
+<div class="lb-steps">
+    <a href="{{ url_for('step_areas') }}" class="lb-step {{ 'lb-step--active' if current_step == 1 else 'lb-step--done' if current_step > 1 else '' }}">I</a>
+    <a href="{{ url_for('step_goals') }}" class="lb-step {{ 'lb-step--active' if current_step == 2 else 'lb-step--done' if current_step > 2 else '' }}">II</a>
+    <a href="{{ url_for('step_info') }}" class="lb-step {{ 'lb-step--active' if current_step == 3 else 'lb-step--done' if current_step > 3 else '' }}">III</a>
+    <a href="{{ url_for('step_panorama') }}" class="lb-step {{ 'lb-step--active' if current_step == 4 else 'lb-step--done' if current_step > 4 else '' }}">IV</a>
+</div>

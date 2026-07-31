@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Life Builder{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <header class="lb-header">
+        <div class="lb-header__brand">
+            <span class="lb-header__mark">⟠</span>
+            <span class="lb-header__name">LIFE BUILDER</span>
+        </div>
+        {% block header_extra %}{% endblock %}
+    </header>
+    <main class="lb-main">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="{{ url_for('static', filename='js/background.js') }}"></script>
+</body>
+</html>

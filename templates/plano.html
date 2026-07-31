@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Plano completo{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Voltar ao hoje</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-plano">
+    <p class="lb-eyebrow">Ciclo {{ user.current_cycle }} · {{ days|length }} dias</p>
+    <h1 class="lb-title lb-title--md">Seu Life Build, do dia 1 ao dia final</h1>
+    <p class="lb-lede">Cada dia soma 8h de missões (primárias + secundárias), mais rotina e, se ativada, a dieta do dia — organizados por categoria.</p>
+
+    <div class="lb-progress-block">
+        <div class="lb-progress-bar">
+            <div class="lb-progress-bar__fill" style="width: {{ progress_pct }}%"></div>
+        </div>
+        <span class="lb-progress-block__label">{{ logged }} / {{ total }} missões registradas · {{ progress_pct }}%</span>
+    </div>
+
+    {% if diet_data %}
+    <section class="lb-diet-panel" id="diet-panel">
+        <p class="lb-eyebrow">Dieta · {{ diet_data.tipo_label }}</p>
+        <h2 class="lb-panel-title">Cardápio do dia, com substituições</h2>
+        <p class="lb-lede">Cada refeição já vem com uma sugestão da sua dieta. Troque por qualquer uma das opções reais e curadas de outras dietas (inclusive fora da sua) — os ingredientes e o cálculo nutricional abaixo se atualizam na hora.</p>
+
+        <div class="lb-diet-meals" id="diet-meals"></div>
+
+        <div class="lb-diet-totals" id="diet-totals">
+            <p class="lb-diet-totals__title">Total nutricional do dia</p>
+            <div class="lb-diet-totals__grid">
+                <div class="lb-diet-total"><span class="lb-diet-total__value" id="total-kcal">0</span><span class="lb-diet-total__label">kcal</span></div>
+                <div class="lb-diet-total"><span class="lb-diet-total__value" id="total-prot">0g</span><span class="lb-diet-total__label">proteína</span></div>
+                <div class="lb-diet-total"><span class="lb-diet-total__value" id="total-carb">0g</span><span class="lb-diet-total__label">carboidrato</span></div>
+                <div class="lb-diet-total"><span class="lb-diet-total__value" id="total-gord">0g</span><span class="lb-diet-total__label">gordura</span></div>
+            </div>
+            <p class="lb-diet-totals__note">Valores aproximados, de uso ilustrativo — não substituem orientação de nutricionista.</p>
+        </div>
+    </section>
+    <script id="diet-data" type="application/json">{{ diet_data|tojson }}</script>
+    <script src="{{ url_for('static', filename='js/diet.js') }}"></script>
+    {% endif %}
+
+    <div class="lb-day-list">
+        {% for day_date, missions in days.items() %}
+        <details class="lb-day-card" {% if day_date == today %}open{% endif %}>
+            <summary>
+                <span class="lb-day-card__date">
+                    Dia {{ loop.index }}
+                    {% if day_date == today %}<span class="lb-day-card__today-tag">HOJE</span>{% endif %}
+                </span>
+                <span class="lb-day-card__meta">{{ day_date }} · {{ missions|selectattr('completion_pct', 'defined')|rejectattr('completion_pct', 'none')|list|length }}/{{ missions|length }} registradas</span>
+            </summary>
+
+            {% for area, area_missions in missions|groupby('area') %}
+            <p class="lb-day-card__category">{{ area_labels.get(area, area) }}</p>
+            <ul class="lb-mission-list lb-mission-list--compact">
+                {% for m in area_missions %}
+                <li class="lb-mission {{ 'lb-mission--done' if m.completion_pct is not none else '' }}"
+                    data-mission-id="{{ m.id }}" data-area="{{ m.area }}" data-tier="{{ m.tier }}">
+                    <div class="lb-mission__top">
+                        <div class="lb-mission__body">
+                            <span class="lb-mission__area">
+                                <span class="lb-mission__period">{{ period_labels.get(m.period, m.period) }}</span> ·
+                                <span class="lb-mission__tier lb-mission__tier--{{ m.tier }}">{{ tier_labels.get(m.tier, m.tier) }}</span> ·
+                                {{ m.duration_min|round }} min
+                                {% if m.area != 'rotina' %} · {{ goal_label_fn(user, m.area, m.goal) }}{% endif %}
+                            </span>
+                            <span class="lb-mission__desc">{{ m.description }}</span>
+                            {% if m.detail %}
+                            <details class="lb-mission__detail">
+                                <summary>Ver detalhes</summary>
+                                <pre>{{ m.detail }}</pre>
+                            </details>
+                            {% endif %}
+                        </div>
+                        {% if m.completion_pct is not none %}
+                        <span class="lb-mission__done-tag">{{ m.completion_pct|round }}%</span>
+                        {% elif day_date != today %}
+                        <span class="lb-mission__pending-tag">pendente</span>
+                        {% endif %}
+                    </div>
+                    {% if m.completion_pct is none and day_date == today %}
+                        {% if m.action and m.action.startswith('quiz') %}
+                        <div class="lb-mission__logger">
+                            <a href="{{ url_for('quiz', mission_id=m.id) }}" class="lb-btn lb-btn--sm lb-btn--primary">Resolver questões →</a>
+                        </div>
+                        {% else %}
+                        <div class="lb-mission__logger" data-mission-id="{{ m.id }}">
+                            <input type="range" min="0" max="100" step="10" value="50" class="lb-volume-slider lb-mission__slider">
+                            <span class="lb-mission__slider-value">50%</span>
+                            <button class="lb-btn lb-btn--sm lb-mission__confirm" data-mission-id="{{ m.id }}">Registrar</button>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+        </details>
+        {% endfor %}
+    </div>
+</section>
+
+<script>
+    window.LB_OVERALL_PROGRESS = null;
+</script>
+<script src="{{ url_for('static', filename='js/avatar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,175 @@
+# -*- coding: utf-8 -*-
+"""
+Life Builder Assistant -- integracao opcional com a Groq para gerar uma nota de
+estrategia personalizada a partir do perfil do usuario.
+
+Design: a IA NUNCA gera as missoes em si (isso continua 100% deterministico em
+engine.py, testavel e gratuito). Ela so escreve um paragrafo curto de estrategia
+que aparece no dashboard/panorama, com base num resumo compacto do perfil -- uma
+unica chamada por ciclo (nao por missao), com max_tokens baixo, para manter o custo
+e a latencia previsiveis. Se a chave nao estiver configurada, ou a chamada falhar por
+qualquer motivo, o app funciona normalmente sem a nota -- a IA e um "tempero"
+opcional, nunca uma dependencia.
+"""
+import json
+import os
+import urllib.request
+import urllib.error
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+TIMEOUT_SECONDS = 12
+MAX_TOKENS = 260
+
+# DeepSeek gera as questoes de quiz personalizadas por tema (missoes tipo
+# "concurso"/estudo com um assunto especifico digitado pelo usuario). Usamos
+# DeepSeek em vez da Groq aqui por ter uma camada gratuita mais generosa para
+# esse tipo de chamada JSON maior/estruturada; a nota de estrategia continua
+# na Groq. Ambas seguem o mesmo principio: recurso opcional, com fallback
+# silencioso se a chave nao estiver configurada ou a chamada falhar.
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+QUIZ_TIMEOUT_SECONDS = 25
+QUIZ_MAX_TOKENS = 2200
+
+QUIZ_SYSTEM_PROMPT = (
+    "Voce cria questoes de multipla escolha para um app de estudos, em portugues "
+    "do Brasil. Gere questoes originais (nunca copiadas de uma prova real), "
+    "tecnicamente corretas e especificas do tema pedido -- nada generico. "
+    "Responda APENAS com um JSON valido (sem markdown, sem texto fora do JSON): "
+    "uma lista de objetos, cada um com as chaves: "
+    '"pergunta" (string), "alternativas" (lista de exatamente 4 strings), '
+    '"correta" (indice 0-3 da alternativa correta), '
+    '"fonte" (sempre a string fixa "Questão-modelo gerada por IA para este tema").'
+)
+
+
+def quiz_ai_available():
+    return bool(DEEPSEEK_API_KEY)
+
+
+def generate_quiz_questions(topic, n=10):
+    """Gera `n` questoes de multipla escolha sobre `topic` via DeepSeek.
+    Retorna uma lista de dicts no formato do QUIZ_BANK estatico, ou None se a
+    IA nao estiver configurada / a chamada falhar / a resposta nao vier em
+    JSON valido -- nesses casos quem chamou deve cair para um fallback."""
+    if not DEEPSEEK_API_KEY or not topic:
+        return None
+
+    user_prompt = f"Tema: {topic}\nGere {n} questões de múltipla escolha sobre esse tema, com dificuldade variada."
+    body = json.dumps({
+        "model": DEEPSEEK_MODEL,
+        "messages": [
+            {"role": "system", "content": QUIZ_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "max_tokens": QUIZ_MAX_TOKENS,
+        "temperature": 0.7,
+        "response_format": {"type": "json_object"},
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        DEEPSEEK_URL, data=body, method="POST",
+        headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=QUIZ_TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        raw = data["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(raw)
+        # aceita tanto uma lista direta quanto {"questoes": [...]} / {"perguntas": [...]}
+        if isinstance(parsed, dict):
+            for key in ("questoes", "perguntas", "questions", "items"):
+                if key in parsed and isinstance(parsed[key], list):
+                    parsed = parsed[key]
+                    break
+        if not isinstance(parsed, list):
+            return None
+
+        questions = []
+        for q in parsed:
+            alternativas = q.get("alternativas")
+            correta = q.get("correta")
+            pergunta = q.get("pergunta")
+            if not pergunta or not isinstance(alternativas, list) or len(alternativas) != 4:
+                continue
+            if not isinstance(correta, int) or not (0 <= correta <= 3):
+                continue
+            questions.append({
+                "pergunta": pergunta, "alternativas": alternativas, "correta": correta,
+                "fonte": q.get("fonte") or "Questão-modelo gerada por IA para este tema",
+            })
+        return questions or None
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
+            ValueError, TimeoutError, TypeError):
+        return None
+
+SYSTEM_PROMPT = (
+    "Voce e um assistente de planejamento pessoal direto e objetivo, no estilo de um "
+    "treinador experiente. Responda em portugues do Brasil, em no maximo 5 frases "
+    "curtas, sem listas, sem markdown, sem saudacao. Foque em: (1) como equilibrar as "
+    "areas escolhidas dado o tempo disponivel e o peso que o usuario deu a cada uma, "
+    "(2) um ajuste pratico especifico se houver alguma restricao/observacao do "
+    "usuario (lesao, rotina, preferencia), e (3) uma dica concreta para o primeiro "
+    "ciclo de 14 dias. Nao invente dados que nao foram informados."
+)
+
+
+def ai_available():
+    return bool(GROQ_API_KEY)
+
+
+def build_profile_summary(user, area_label_fn, area_goals_label_fn):
+    """Resume o perfil do usuario em poucas linhas -- mantem o prompt pequeno e
+    barato, evitando mandar o plano de missoes inteiro para a IA."""
+    lines = [f"Nome: {user['nome']}"]
+    for area in user["areas"]:
+        goals = user["goals"].get(area) or []
+        if not goals:
+            continue
+        nivel = user["niveis"].get(area, "iniciante")
+        peso = user["pesos"].get(area, 3)
+        lines.append(
+            f"- {area_label_fn(user, area)}: {area_goals_label_fn(user, area)} "
+            f"(nivel {nivel}, peso {peso}/5)"
+        )
+    tempo = user["basic_info"].get("tempo_livre_min")
+    if tempo:
+        lines.append(f"Tempo livre de foco por dia: {tempo} minutos (o resto ate 8h vira missoes leves).")
+    if user["extra_info"].get("dieta") == "sim":
+        lines.append(f"Dieta ativada: {user['extra_info'].get('dieta_tipo', 'padrao')}.")
+    notas = user["extra_info"].get("panorama_notes")
+    if notas:
+        lines.append(f"Observacao do usuario: {notas}")
+    return "\n".join(lines)
+
+
+def generate_strategy_note(profile_summary):
+    """Retorna um paragrafo curto de estrategia personalizada, ou None se a IA nao
+    estiver disponivel/configurada ou a chamada falhar (o app segue funcionando
+    normalmente sem essa nota em qualquer um desses casos)."""
+    if not GROQ_API_KEY or not profile_summary:
+        return None
+
+    body = json.dumps({
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": profile_summary},
+        ],
+        "max_tokens": MAX_TOKENS,
+        "temperature": 0.6,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        GROQ_URL, data=body, method="POST",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"].strip()
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError, ValueError, TimeoutError):
+        return None

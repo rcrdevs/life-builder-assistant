@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Minhas builds{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('index') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Voltar</a>
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Sua conta</p>
+    <h1 class="lb-title">Minhas builds</h1>
+    <p class="lb-lede">Cada build é uma jornada independente — seus próprios objetivos, missões e progresso. Você pode manter várias ao mesmo tempo (ex: uma para a vida real, outra para testar um plano diferente) e trocar entre elas quando quiser.</p>
+
+    <div class="lb-build-grid">
+        {% for b in builds %}
+        <div class="lb-build-card {{ 'lb-build-card--active' if b.id == active_id else '' }}">
+            <div class="lb-build-card__top">
+                <p class="lb-build-card__name">{{ b.build_name }}</p>
+                {% if b.id == active_id %}<span class="lb-build-card__tag">ativa</span>{% endif %}
+            </div>
+            <p class="lb-build-card__hero">{{ b.nome }}</p>
+            {% if b.onboarding_complete %}
+            <p class="lb-build-card__meta">Ciclo {{ b.current_cycle }} ·
+                {% if b.areas %}{% for a in b.areas %}{{ area_labels.get(a, a) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}sem áreas{% endif %}
+            </p>
+            {% else %}
+            <p class="lb-build-card__meta lb-build-card__meta--pending">Onboarding incompleto</p>
+            {% endif %}
+
+            <div class="lb-build-card__actions">
+                {% if b.id != active_id %}
+                <form method="post" action="{{ url_for('builds_select', build_id=b.id) }}">
+                    <button type="submit" class="lb-btn lb-btn--sm lb-btn--primary">Usar esta build</button>
+                </form>
+                {% else %}
+                <a href="{{ url_for('index') }}" class="lb-btn lb-btn--sm lb-btn--ghost">Ir para o dashboard →</a>
+                {% endif %}
+                <form method="post" action="{{ url_for('builds_delete', build_id=b.id) }}"
+                      onsubmit="return confirm('Isso apaga esta build e todo o progresso dela para sempre. Tem certeza?');">
+                    <button type="submit" class="lb-btn lb-btn--sm lb-btn--danger">Excluir build</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="lb-build-card lb-build-card--new">
+            <p class="lb-build-card__name">Nova build</p>
+            <p class="lb-build-card__meta">Comece uma jornada do zero, com seus próprios objetivos.</p>
+            <form method="post" action="{{ url_for('builds_new') }}" class="lb-build-new-form">
+                <label class="lb-field">
+                    <span>Nome da build</span>
+                    <input type="text" name="build_name" placeholder="Ex: Vida real, Experimento 2026...">
+                </label>
+                <label class="lb-field">
+                    <span>Como podemos te chamar nessa build?</span>
+                    <input type="text" name="nome" placeholder="Seu nome ou apelido">
+                </label>
+                <button type="submit" class="lb-btn lb-btn--sm lb-btn--primary">Criar build →</button>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

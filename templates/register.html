@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Criar conta{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-auth">
+    <p class="lb-eyebrow">Nova conta</p>
+    <h1 class="lb-title">Comece seu Life Build.</h1>
+    <p class="lb-lede">Leva menos de um minuto — depois disso, seu progresso fica salvo automaticamente.</p>
+
+    {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
+
+    <form method="post" action="{{ url_for('register') }}" class="lb-form">
+        <label class="lb-field">
+            <span>Como podemos te chamar?</span>
+            <input type="text" name="nome" placeholder="Seu nome ou apelido" required>
+        </label>
+        <label class="lb-field">
+            <span>E-mail</span>
+            <input type="email" name="email" required>
+        </label>
+        <label class="lb-field">
+            <span>Senha</span>
+            <input type="password" name="password" required minlength="4">
+        </label>
+        <button type="submit" class="lb-btn lb-btn--primary">Criar conta →</button>
+    </form>
+
+    <p class="lb-auth__switch">Já tem conta? <a href="{{ url_for('login') }}">Entrar</a></p>
+</section>
+{% endblock %}

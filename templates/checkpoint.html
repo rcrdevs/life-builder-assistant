@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Checkpoint do ciclo{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Fim do ciclo {{ cycle }} · 14 dias concluídos</p>
+    <h1 class="lb-title">Como você acha que foi seu progresso?</h1>
+    <p class="lb-lede">Para cada tema, arraste a barra de 0 a 10 com o quanto você <em>sente</em> que avançou.
+        Isso é combinado com o que foi realmente registrado nas missões: se sua percepção for melhor que o
+        medido, aceleramos a barra rumo à conclusão; se for pior, ajustamos para um ponto mais realista.</p>
+
+    <form method="post" action="{{ url_for('checkpoint') }}" class="lb-form">
+        <div class="lb-checkpoint-list">
+            {% for t in themes %}
+            <div class="lb-checkpoint-item">
+                <div class="lb-checkpoint-item__head">
+                    <span class="lb-checkpoint-item__label">{{ t.label }}</span>
+                    <span class="lb-checkpoint-item__value" data-for="rating_{{ t.area }}_{{ t.goal }}">5</span>
+                </div>
+                <input type="range" min="0" max="10" step="1" value="5"
+                       name="rating_{{ t.area }}_{{ t.goal }}"
+                       id="rating_{{ t.area }}_{{ t.goal }}"
+                       class="lb-volume-slider">
+            </div>
+            {% endfor %}
+        </div>
+
+        <button type="submit" class="lb-btn lb-btn--primary">Confirmar e gerar os próximos 14 dias →</button>
+    </form>
+</section>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

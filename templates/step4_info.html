@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Suas medidas{% endblock %}
+{% block header_extra %}{% include "_step_nav.html" with context %}{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Passo III — As medidas do escultor</p>
+    <h1 class="lb-title">Um pouco sobre o ponto de partida — e o quanto cada área pesa.</h1>
+    <p class="lb-lede">Seu dia de desenvolvimento sempre soma 8 horas: o tempo livre que você informar vira
+        missões <strong>primárias</strong> (foco dedicado); o restante até completar 8h vira missões
+        <strong>secundárias</strong> — mais leves, que podem acontecer em paralelo com sua rotina (trajeto,
+        tarefas domésticas etc). O peso de cada área decide como esse tempo é dividido entre elas.</p>
+
+    <form method="post" action="{{ url_for('step_info') }}" class="lb-form">
+        <label class="lb-field">
+            <span>Sua cidade (para sugerir eventos e provas locais no futuro)</span>
+            <input type="text" name="cidade" placeholder="Ex: São Paulo, SP" value="{{ user.basic_info.cidade or '' }}">
+        </label>
+
+        <label class="lb-field">
+            <span>Quanto tempo livre por dia você consegue dedicar de foco real (missões primárias)?</span>
+            <select name="tempo_livre_min" required>
+                {% set atual = user.basic_info.tempo_livre_min %}
+                <option value="30" {{ 'selected' if atual == 30 else '' }}>Até 30 minutos</option>
+                <option value="60" {{ 'selected' if not atual or atual == 60 else '' }}>Cerca de 1 hora</option>
+                <option value="90" {{ 'selected' if atual == 90 else '' }}>Cerca de 1h30</option>
+                <option value="120" {{ 'selected' if atual == 120 else '' }}>2 horas</option>
+                <option value="180" {{ 'selected' if atual == 180 else '' }}>3 horas</option>
+                <option value="240" {{ 'selected' if atual == 240 else '' }}>4 horas ou mais</option>
+            </select>
+        </label>
+
+        {% if 'saude' in user.areas %}
+        <div class="lb-field-row">
+            <label class="lb-field">
+                <span>Peso atual (kg)</span>
+                <input type="number" step="0.1" name="peso_kg" placeholder="Ex: 78" value="{{ user.basic_info.peso_kg or '' }}">
+            </label>
+            <label class="lb-field">
+                <span>Altura (cm)</span>
+                <input type="number" step="0.1" name="altura_cm" placeholder="Ex: 175" value="{{ user.basic_info.altura_cm or '' }}">
+            </label>
+        </div>
+
+        <fieldset class="lb-goal-group">
+            <legend>Dieta</legend>
+            <div class="lb-goal-options">
+                <label class="lb-radio-pill">
+                    <input type="radio" name="dieta" value="sim" {{ 'checked' if user.extra_info.dieta == 'sim' else '' }} required>
+                    <span>Incluir sugestões de dieta no meu plano</span>
+                </label>
+                <label class="lb-radio-pill">
+                    <input type="radio" name="dieta" value="nao" {{ 'checked' if user.extra_info.dieta != 'sim' else '' }} required>
+                    <span>Não, obrigado</span>
+                </label>
+            </div>
+            <label class="lb-field" style="margin-top: 14px;">
+                <span>Se sim, qual tipo de dieta?</span>
+                <select name="dieta_tipo">
+                    {% for key, label in diet_type_labels.items() %}
+                    <option value="{{ key }}" {{ 'selected' if user.extra_info.dieta_tipo == key else '' }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </fieldset>
+        {% endif %}
+
+        <fieldset class="lb-goal-group">
+            <legend>Nível de experiência e peso de cada área</legend>
+            <p class="lb-hint">O peso (1 a 5) decide a fatia do seu tempo diário que vai para cada área — pense
+                nele como o quanto essa área importa para você agora, dentro do conceito de Paideia de
+                desenvolvimento completo.</p>
+            {% for area in user.areas %}
+            <div class="lb-area-weight-row">
+                <span class="lb-area-weight-row__label">{{ area_labels.get(area) or user.custom_area_labels.get(area) or area }}</span>
+                <select name="nivel_{{ area }}" class="lb-area-weight-row__nivel">
+                    {% set atual_nivel = user.niveis.get(area) %}
+                    {% for nk, nl in nivel_labels.items() %}
+                    <option value="{{ nk }}" {{ 'selected' if atual_nivel == nk else '' }}>{{ nl }}</option>
+                    {% endfor %}
+                </select>
+                <div class="lb-area-weight-row__peso">
+                    <span>Peso</span>
+                    <input type="range" min="1" max="5" step="1"
+                           value="{{ user.pesos.get(area, default_peso) }}"
+                           name="peso_area_{{ area }}" class="lb-volume-slider lb-peso-slider">
+                    <span class="lb-peso-slider-value">{{ user.pesos.get(area, default_peso) }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </fieldset>
+
+        <div class="lb-form-actions">
+            <a href="{{ url_for('step_goals') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
+            <button type="submit" class="lb-btn lb-btn--primary">Continuar →</button>
+        </div>
+    </form>
+</section>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

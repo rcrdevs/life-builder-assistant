@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Defina seus objetivos{% endblock %}
+{% block header_extra %}{% include "_step_nav.html" with context %}{% endblock %}
+{% block content %}
+<section class="lb-onboard">
+    <p class="lb-eyebrow">Passo II — As primeiras marcas do cinzel</p>
+    <h1 class="lb-title">Dentro de cada área, o que exatamente você quer conquistar?</h1>
+    <p class="lb-lede">Você pode escolher mais de um objetivo por área. Quanto mais específico, mais preciso é o plano — e mais fácil fica medir o progresso.</p>
+
+    {% if resolved %}
+    <div class="lb-callout">
+        Já definidos: {% for area, label in resolved.items() %}<strong>{{ area_labels.get(area, area) }}</strong> → {{ label }}{{ ', ' if not loop.last else '' }}{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('step_goals') }}" class="lb-form">
+        {% for area, options in goal_options.items() %}
+        <fieldset class="lb-goal-group">
+            <legend>{{ area_labels[area] }}</legend>
+            <div class="lb-goal-options">
+                {% for goal_key, goal_label in options.items() %}
+                <div class="lb-goal-option">
+                    <label class="lb-radio-pill">
+                        <input type="checkbox" name="goal_{{ area }}" value="{{ goal_key }}">
+                        <span>{{ goal_label }}</span>
+                    </label>
+                    {% if (area, goal_key) in needs_detail %}
+                    {% set info = needs_detail[(area, goal_key)] %}
+                    <input type="text" name="detail_{{ area }}_{{ goal_key }}" class="lb-goal-option__detail"
+                           placeholder="{{ info.prompt }} ({{ info.placeholder }})">
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <div class="lb-radio-pill lb-radio-pill--outro js-outro-trigger"
+                     data-checkbox="goal_{{ area }}_outro_check" data-textinput="goal_{{ area }}_outro_text_input"
+                     data-label="goal_{{ area }}_outro_label" tabindex="0" role="button">
+                    <input type="checkbox" name="goal_{{ area }}" value="outro" id="goal_{{ area }}_outro_check" class="lb-visually-hidden-input">
+                    <input type="hidden" name="goal_{{ area }}_outro_text" id="goal_{{ area }}_outro_text_input">
+                    <span>Outro: <span id="goal_{{ area }}_outro_label">clique para escrever</span></span>
+                </div>
+            </div>
+        </fieldset>
+        {% endfor %}
+
+        {% include "_outro_dialog.html" %}
+
+        <div class="lb-form-actions">
+            <a href="{{ url_for('step_areas') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
+            <button type="submit" class="lb-btn lb-btn--primary">Continuar →</button>
+        </div>
+    </form>
+</section>
+<script src="{{ url_for('static', filename='js/outro.js') }}"></script>
+{% endblock %}

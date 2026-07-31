@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Panorama da sua build{% endblock %}
+{% block header_extra %}{% include "_step_nav.html" with context %}{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Passo IV — Panorama final</p>
+    <h1 class="lb-title">Essa é a estratégia que vamos traçar.</h1>
+    <p class="lb-lede">Revise tudo antes de gerar seu Life Build. Se algo estiver errado, use os números I–III acima para voltar e ajustar — seus dados ficam salvos.</p>
+
+    <div class="lb-panorama-grid">
+        {% for item in panorama_areas %}
+        <div class="lb-panorama-card">
+            <span class="lb-panorama-card__icon">{{ item.icon }}</span>
+            <div>
+                <p class="lb-panorama-card__area">{{ item.area_label }} <span class="lb-panorama-card__peso">peso {{ item.peso }}</span></p>
+                <p class="lb-panorama-card__goal">{{ item.goal_label }}</p>
+                <p class="lb-panorama-card__nivel">Nível: {{ item.nivel }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="lb-panorama-summary">
+        <div class="lb-panorama-summary__item">
+            <span class="lb-panorama-summary__label">Cidade</span>
+            <span class="lb-panorama-summary__value">{{ user.basic_info.cidade or "não informada" }}</span>
+        </div>
+        <div class="lb-panorama-summary__item">
+            <span class="lb-panorama-summary__label">Tempo livre/dia (primárias)</span>
+            <span class="lb-panorama-summary__value">{{ user.basic_info.tempo_livre_min }} minutos — o restante até 8h vira missões secundárias</span>
+        </div>
+        {% if user.extra_info.dieta == 'sim' %}
+        <div class="lb-panorama-summary__item">
+            <span class="lb-panorama-summary__label">Dieta</span>
+            <span class="lb-panorama-summary__value">{{ diet_type_labels.get(user.extra_info.dieta_tipo, "Padrão") }} — refeições detalhadas no plano completo</span>
+        </div>
+        {% endif %}
+        <div class="lb-panorama-summary__item">
+            <span class="lb-panorama-summary__label">Duração do ciclo</span>
+            <span class="lb-panorama-summary__value">14 dias — depois disso, um checkpoint de autoavaliação ajusta o plano seguinte</span>
+        </div>
+    </div>
+
+    <form method="post" action="{{ url_for('step_panorama') }}" class="lb-form">
+        <label class="lb-field">
+            <span>Quer adicionar algum detalhe/contexto que não coube nas perguntas acima? (opcional)</span>
+            <textarea name="notas" rows="3" placeholder="Ex: tenho uma lesão no joelho, prefiro estudar à noite, viajo bastante a trabalho...">{{ user.extra_info.panorama_notes or '' }}</textarea>
+        </label>
+
+        <div class="lb-form-actions">
+            <a href="{{ url_for('step_info') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
+            <button type="submit" class="lb-btn lb-btn--primary">
+                {{ "Salvar alterações →" if user.onboarding_complete else "Gerar meu Life Build →" }}
+            </button>
+        </div>
+    </form>
+</section>
+{% endblock %}

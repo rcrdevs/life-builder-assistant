@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Simulado{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Cancelar</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Simulado</p>
+    <h1 class="lb-title lb-title--md">{{ mission.description }}</h1>
+
+    {% if not questions %}
+    <p class="lb-lede">
+        Ainda não conseguimos montar questões para este tema específico — isso acontece se a
+        geração por IA não estiver configurada no momento e não houver um banco pronto para ele.
+        Você pode registrar essa missão manualmente pelo controle de progresso no painel, sem
+        perder os pontos dela.
+    </p>
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">← Voltar ao painel</a>
+    {% else %}
+    <p class="lb-lede">
+        {% if source == 'ia' or source == 'cache' %}
+        Estas questões foram geradas especificamente para o tema que você digitou — são
+        questões-modelo originais, não trechos de uma prova/edital real.
+        {% else %}
+        Estas são questões-modelo genéricas, escritas no estilo comum de bancas de concurso — não
+        cobrem necessariamente o tema exato que você digitou, pois a geração personalizada não
+        estava disponível para esta missão. Cada uma mostra a fonte/tema ao final.
+        {% endif %}
+    </p>
+
+    <form method="post" action="{{ url_for('quiz', mission_id=mission.id) }}" class="lb-form">
+        {% for q in questions %}
+        {% set qidx = loop.index0 %}
+        <fieldset class="lb-goal-group lb-quiz-question">
+            <legend>Questão {{ loop.index }}</legend>
+            <p class="lb-quiz-question__text">{{ q.pergunta }}</p>
+            <div class="lb-quiz-question__options">
+                {% for alt in q.alternativas %}
+                <label class="lb-radio-pill lb-radio-pill--block">
+                    <input type="radio" name="q{{ qidx }}" value="{{ loop.index0 }}" required>
+                    <span>{{ alt }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="lb-quiz-question__fonte">{{ q.fonte }}</p>
+        </fieldset>
+        {% endfor %}
+
+        <button type="submit" class="lb-btn lb-btn--primary">Corrigir e registrar →</button>
+    </form>
+    {% endif %}
+</section>
+{% endblock %}

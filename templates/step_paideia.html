@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Paideia{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard">
+    <p class="lb-eyebrow">Antes de continuar</p>
+    <h1 class="lb-title">Você não escolheu nenhum objetivo físico.</h1>
+    <p class="lb-lede">{{ intro }}</p>
+
+    <form method="post" action="{{ url_for('step_paideia') }}" class="lb-form">
+        <fieldset class="lb-goal-group">
+            <legend>Nível de prática física que faz sentido agora</legend>
+            <div class="lb-paideia-levels">
+                {% for key, level in levels.items() %}
+                <label class="lb-radio-pill lb-radio-pill--block">
+                    <input type="radio" name="nivel_fisico" value="{{ key }}" required>
+                    <span class="lb-paideia-levels__label">{{ level.label }}</span>
+                    <span class="lb-paideia-levels__desc">{{ level.desc }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <p class="lb-hint">A pergunta sobre dieta vem no próximo passo, junto com as outras medidas.</p>
+
+        <div class="lb-form-actions">
+            <a href="{{ url_for('step_areas') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
+            <button type="submit" class="lb-btn lb-btn--primary">Continuar →</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

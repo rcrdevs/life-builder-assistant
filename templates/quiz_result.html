@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Resultado do simulado{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Voltar ao hoje</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Resultado</p>
+    <h1 class="lb-title lb-title--md">Você acertou {{ acertos }} de {{ total }} ({{ pct|round }}%)</h1>
+    <p class="lb-lede">Esse percentual já foi registrado como a conclusão desta missão — os pontos entram na barra de progresso no fim do dia, como qualquer outra missão.</p>
+
+    <div class="lb-quiz-review">
+        {% for d in detalhe %}
+        <div class="lb-quiz-review__item {{ 'lb-quiz-review__item--ok' if d.acertou else 'lb-quiz-review__item--erro' }}">
+            <p class="lb-quiz-review__pergunta">{{ loop.index }}. {{ d.pergunta }}</p>
+            <p class="lb-quiz-review__resposta">
+                {% if d.acertou %}✓ Você acertou: {{ d.alternativas[d.correta_idx] }}
+                {% else %}
+                    ✗ Você marcou: {{ d.alternativas[d.escolhida_idx] if d.escolhida_idx is not none and d.escolhida_idx >= 0 else "(não respondida)" }}<br>
+                    Correta: {{ d.alternativas[d.correta_idx] }}
+                {% endif %}
+            </p>
+            <p class="lb-quiz-review__fonte">{{ d.fonte }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--primary">Voltar ao dashboard →</a>
+</section>
+{% endblock %}

@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Seu Life Build{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('step_panorama') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Editar build</a>
+    <a href="{{ url_for('plano') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Ver plano completo</a>
+    <a href="{{ url_for('builds_page') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Minhas builds</a>
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+</div>
+{% endblock %}
+{% block content %}
+
+{% if ai_strategy %}
+<div class="lb-ai-note">
+    <span class="lb-ai-note__tag">Estratégia personalizada · IA</span>
+    <p>{{ ai_strategy }}</p>
+</div>
+{% elif not ai_configured %}
+<div class="lb-ai-note lb-ai-note--muted">
+    <span class="lb-ai-note__tag">Estratégia por IA desativada</span>
+    <p>Defina a variável de ambiente <code>GROQ_API_KEY</code> antes de rodar o app para receber aqui uma estratégia personalizada gerada por IA a cada ciclo.</p>
+</div>
+{% endif %}
+
+{% if show_sleep_prompt %}
+<div class="lb-sleep-banner">
+    <p>Bom te ver de novo, {{ user.nome }}. Quantas horas você dormiu essa noite?</p>
+    <form method="post" action="{{ url_for('log_sleep') }}" class="lb-sleep-banner__form">
+        <input type="number" name="horas" min="0" max="14" step="0.5" placeholder="ex: 7" required>
+        <button type="submit" class="lb-btn lb-btn--primary lb-btn--sm">Registrar</button>
+    </form>
+</div>
+{% endif %}
+
+{% if show_rest_message %}
+<div class="lb-rest-banner">
+    O descanso é uma parte importante do progresso. Às vezes chegamos mais rápido indo devagar.
+</div>
+{% endif %}
+
+<section class="lb-dashboard">
+
+    <!-- COLUNA 1: AVATAR + PROGRESSO POR TEMA -->
+    <aside class="lb-panel lb-panel--statue">
+        <p class="lb-eyebrow">{{ user.nome }} · ciclo {{ user.current_cycle }}</p>
+        <div class="lb-statue-wrap">
+            {% include "avatar_svg.html" %}
+        </div>
+
+        <div class="lb-stat-sheet">
+            {% for r in goal_progress_rows %}
+            <div class="lb-stat-row">
+                <span class="lb-stat-row__label">{{ area_label_fn(user, r.area) }}</span>
+                <div class="lb-stat-row__bar">
+                    <div class="lb-stat-row__fill" style="width: {{ r.progress_pct|round(1) }}%"></div>
+                </div>
+                <span class="lb-stat-row__value">{{ r.progress_pct|round }}%</span>
+            </div>
+            {% endfor %}
+            <div class="lb-stat-row lb-stat-row--vitality">
+                <span class="lb-stat-row__label">Vitalidade (rotina)</span>
+                <div class="lb-stat-row__bar">
+                    <div class="lb-stat-row__fill" style="width: {{ vitality_pct }}%"></div>
+                </div>
+                <span class="lb-stat-row__value">{{ vitality_pct }}%</span>
+            </div>
+        </div>
+
+        <div class="lb-progress-note">
+            <span>{{ logged_missions }}</span> / {{ total_missions }} missões registradas neste ciclo de {{ plan_days }} dias (até {{ cycle_end }})
+        </div>
+    </aside>
+
+    <!-- COLUNA 2: MISSÕES DE HOJE, POR CATEGORIA -->
+    <section class="lb-panel lb-panel--missions">
+        <p class="lb-eyebrow">Hoje · {{ missions_today|length }} missões</p>
+        <h2 class="lb-panel-title">Marcas do cinzel de hoje</h2>
+
+        {% if missions_today %}
+        <div class="lb-mission-toolbar">
+            <div class="lb-segmented" id="tier-filter">
+                <button type="button" class="lb-segmented__opt lb-segmented__opt--active" data-filter="todas">Todas</button>
+                <button type="button" class="lb-segmented__opt" data-filter="tier:primaria">Principais</button>
+                <button type="button" class="lb-segmented__opt" data-filter="tier:secundaria">Secundárias</button>
+                <button type="button" class="lb-segmented__opt" data-filter="tier:rotina">Rotina</button>
+                {% if 'dieta' in (missions_today|map(attribute='goal')|list) %}
+                <button type="button" class="lb-segmented__opt" data-filter="tier:dieta">Dieta</button>
+                {% endif %}
+            </div>
+            {% if missions_by_area|length > 1 %}
+            <div class="lb-area-dropdown" id="area-dropdown">
+                <button type="button" class="lb-area-dropdown__trigger">
+                    <span>Área</span><span class="lb-area-dropdown__count" id="area-dropdown-count"></span>
+                    <span class="lb-area-dropdown__chevron">▾</span>
+                </button>
+                <div class="lb-area-dropdown__menu">
+                    {% for area in missions_by_area.keys() %}
+                    <label class="lb-area-dropdown__item">
+                        <input type="checkbox" value="{{ area }}"> {{ area_labels.get(area, area) }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if missions_today %}
+        {% for area, missions in missions_by_area.items() %}
+        {% set done_count = missions|selectattr('completion_pct', 'defined')|rejectattr('completion_pct', 'none')|list|length %}
+        <details class="lb-category-block" data-category-area="{{ area }}" {% if loop.first %}open{% endif %}>
+            <summary class="lb-category-block__summary">
+                <span class="lb-category-block__title">{{ area_labels.get(area, area) }}</span>
+                <span class="lb-category-block__count">{{ done_count }}/{{ missions|length }}</span>
+            </summary>
+            <ul class="lb-mission-list">
+                {% for m in missions %}
+                <li class="lb-mission {{ 'lb-mission--done' if m.completion_pct is not none else '' }}"
+                    data-mission-id="{{ m.id }}" data-area="{{ m.area }}" data-tier="{{ m.tier }}">
+                    <div class="lb-mission__top">
+                        <div class="lb-mission__body">
+                            <span class="lb-mission__area">
+                                <span class="lb-mission__period">{{ period_labels.get(m.period, m.period) }}</span> ·
+                                <span class="lb-mission__tier lb-mission__tier--{{ m.tier }}">{{ tier_labels.get(m.tier, m.tier) }}</span> ·
+                                {{ m.duration_min|round }} min
+                            </span>
+                            <span class="lb-mission__desc">{{ m.description }}</span>
+                            {% if m.detail %}
+                            <details class="lb-mission__detail">
+                                <summary>Ver detalhes</summary>
+                                <pre>{{ m.detail }}</pre>
+                            </details>
+                            {% endif %}
+                        </div>
+                        {% if m.completion_pct is not none %}
+                        <span class="lb-mission__done-tag">{{ m.completion_pct|round }}% registrado</span>
+                        {% endif %}
+                    </div>
+                    {% if m.completion_pct is none %}
+                        {% if m.action and m.action.startswith('quiz') %}
+                        <div class="lb-mission__logger">
+                            <a href="{{ url_for('quiz', mission_id=m.id) }}" class="lb-btn lb-btn--sm lb-btn--primary">Resolver questões →</a>
+                        </div>
+                        {% else %}
+                        <div class="lb-mission__logger" data-mission-id="{{ m.id }}">
+                            <input type="range" min="0" max="100" step="10" value="50" class="lb-volume-slider lb-mission__slider">
+                            <span class="lb-mission__slider-value">50%</span>
+                            <button class="lb-btn lb-btn--sm lb-mission__confirm" data-mission-id="{{ m.id }}">Registrar</button>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endfor %}
+        <p class="lb-mission-note">Os pontos de cada missão são somados à barra de progresso do tema no fim do dia. Missões primárias usam seu tempo de foco; secundárias são leves e podem acontecer em paralelo com sua rotina.</p>
+        {% else %}
+        <p class="lb-empty">Nenhuma missão gerada para hoje ainda.</p>
+        {% endif %}
+    </section>
+
+    <!-- COLUNA 3: RECOMENDAÇÕES -->
+    <aside class="lb-panel lb-panel--recs">
+        <p class="lb-eyebrow">Recursos para o caminho</p>
+        <h2 class="lb-panel-title">Recomendado para seus objetivos</h2>
+
+        {% for rec in recs %}
+        <div class="lb-rec-card">
+            <p class="lb-rec-card__title">{{ rec.area_label }} · {{ rec.goal_label }}</p>
+            <div class="lb-rec-block">
+                <span class="lb-rec-block__label">Livros</span>
+                <ul class="lb-rec-livros">
+                    {% for l in rec.livros %}
+                    <li>
+                        <span class="lb-rec-livro">
+                            <a href="{{ l.link }}" target="_blank" rel="noopener" class="lb-rec-livro__trigger">{{ l.titulo }}</a>{% if l.autor %}, de {{ l.autor }}{% endif %}
+                            {% if l.opcoes and l.opcoes|length > 1 %}
+                            <div class="lb-rec-livro__popover">
+                                <p class="lb-rec-livro__popover-title">Onde encontrar</p>
+                                {% for op in l.opcoes %}
+                                <a href="{{ op.url }}" target="_blank" rel="noopener" class="lb-rec-livro__opcao">
+                                    <span class="lb-rec-livro__loja">{{ op.loja }}</span>
+                                    <span class="lb-rec-livro__preco">{{ op.preco_nota }}</span>
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </span>
+                        <span class="lb-rec-preco">{{ l.preco_nota }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="lb-rec-block">
+                <span class="lb-rec-block__label">Vídeos / cursos</span>
+                <div class="lb-rec-videos">
+                    {% for c in rec.conteudo %}
+                    <a href="{{ c.url }}" target="_blank" rel="noopener" class="lb-rec-video">
+                        {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" class="lb-rec-video__thumb">{% endif %}
+                        <span>{{ c.titulo }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="lb-rec-block lb-rec-block--evento">
+                <span class="lb-rec-block__label">Evento sugerido</span>
+                <a href="{{ rec.evento.link }}" target="_blank" rel="noopener">{{ rec.evento.desc }}{% if user.basic_info.cidade %} — próximo de {{ user.basic_info.cidade }}{% endif %}</a>
+            </div>
+        </div>
+        {% endfor %}
+    </aside>
+</section>
+
+<script>
+    window.LB_OVERALL_PROGRESS = {{ overall_progress|round(1) }};
+</script>
+<script src="{{ url_for('static', filename='js/avatar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
