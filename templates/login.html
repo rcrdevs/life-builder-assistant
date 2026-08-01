@@ -8,6 +8,20 @@
 
     {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
 
+    {% if google_client_id %}
+    <div class="lb-auth__google">
+        <div id="g_id_onload"
+             data-client_id="{{ google_client_id }}"
+             data-callback="onGoogleCredential"
+             data-auto_prompt="false"></div>
+        <div class="g_id_signin" data-type="standard" data-theme="outline" data-size="large"
+             data-text="signin_with" data-shape="rectangular" data-logo_alignment="left"></div>
+        <p class="lb-error" data-google-error></p>
+    </div>
+    <p class="lb-auth__divider"><span>ou entre com e-mail</span></p>
+    <script src="{{ url_for('static', filename='js/google_auth.js') }}"></script>
+    {% endif %}
+
     <form method="post" action="{{ url_for('login') }}" class="lb-form">
         <label class="lb-field">
             <span>E-mail</span>

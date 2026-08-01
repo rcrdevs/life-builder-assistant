@@ -31,8 +31,29 @@ from engine import (
 )
 import ai
 
+try:
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_auth_requests
+    GOOGLE_AUTH_LIB_AVAILABLE = True
+except ImportError:
+    # a lib "google-auth" e opcional -- sem ela (ou sem GOOGLE_CLIENT_ID
+    # configurado), o app roda 100% normal, so sem o botao "Entrar com
+    # Google" (ver GOOGLE_CLIENT_ID logo abaixo e .env.example).
+    GOOGLE_AUTH_LIB_AVAILABLE = False
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "life-builder-prototype-secret-key")  # troque em producao (ver .env.example)
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_LOGIN_ENABLED = bool(GOOGLE_CLIENT_ID) and GOOGLE_AUTH_LIB_AVAILABLE
+
+
+@app.context_processor
+def inject_session_flags():
+    return {
+        "is_guest": bool(session.get("is_guest")),
+        "google_client_id": GOOGLE_CLIENT_ID if GOOGLE_LOGIN_ENABLED else "",
+    }
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_PORT = int(os.environ.get("DB_PORT", 5432))
@@ -121,6 +142,8 @@ def init_db():
         id VARCHAR(36) PRIMARY KEY,
         email VARCHAR(255) UNIQUE,
         password_hash VARCHAR(255),
+        google_sub VARCHAR(64),
+        is_guest INT DEFAULT 0,
         created_at VARCHAR(32)
     );
     CREATE TABLE IF NOT EXISTS users (
@@ -212,6 +235,10 @@ def init_db():
     _ensure_columns(db, "missions", {
         "tier": "VARCHAR(32)", "duration_min": "DOUBLE PRECISION", "detail": "TEXT", "action": "VARCHAR(32)",
     })
+    _ensure_columns(db, "accounts", {
+        "google_sub": "VARCHAR(64)",
+        "is_guest": "INT DEFAULT 0",
+    })
 
     # migracao unica: bancos de versoes anteriores tinham 1 build = 1 conta de
     # login (email/senha direto na tabela users). Agora contas ficam em
@@ -237,13 +264,78 @@ def init_db():
 # ---------------------------------------------------------------------------
 # Autenticacao
 # ---------------------------------------------------------------------------
-def login_required(view):
+def create_guest_account():
+    db = get_db()
+    account_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO accounts (id, email, password_hash, is_guest, created_at) VALUES (?, NULL, NULL, 1, ?)",
+        (account_id, date.today().isoformat()),
+    )
+    db.commit()
+    return account_id
+
+
+def guest_allowed(view):
+    """Como login_required, so que em vez de mandar pro /login quando nao ha
+    sessao, cria uma conta-convidado transparente na hora -- assim a pessoa
+    consegue usar o app inteiro (onboarding + dashboard) sem criar conta.
+    So quando ela realmente registra (ou entra com Google) essa conta
+    convidado vira uma conta de verdade, ver register()/auth_google()."""
     @wraps(view)
     def wrapped(*args, **kwargs):
         if not session.get("account_id"):
-            return redirect(url_for("login"))
+            session["account_id"] = create_guest_account()
+            session["is_guest"] = True
         return view(*args, **kwargs)
     return wrapped
+
+
+def real_account_required(view):
+    """Para telas que exigem conta de verdade (gerenciar varias builds nao
+    faz sentido pra uma sessao de teste que pode sumir a qualquer momento)."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("account_id") or session.get("is_guest"):
+            return redirect(url_for("register"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def _attach_session_to_account(account_id):
+    """Chamado depois de um login bem-sucedido (senha ou Google) numa conta
+    de verdade. Se a sessao atual era de um convidado que ja tinha gerado
+    uma build (onboarding_complete), essa build "muda de dono" pra conta que
+    acabou de logar em vez de ser perdida; senao, a conta-convidado vazia e
+    descartada."""
+    db = get_db()
+    guest_account_id = session.get("account_id") if session.get("is_guest") else None
+    guest_build_id = session.get("user_id") if guest_account_id else None
+    claimed = False
+
+    if guest_account_id and guest_account_id != account_id:
+        build = None
+        if guest_build_id:
+            build = db.execute(
+                "SELECT * FROM users WHERE id=? AND account_id=?", (guest_build_id, guest_account_id)
+            ).fetchone()
+        if build and build["onboarding_complete"]:
+            db.execute(
+                "UPDATE users SET account_id=?, build_name=?, last_active_at=? WHERE id=?",
+                (account_id, "Build (modo teste)", datetime.now().isoformat(), guest_build_id),
+            )
+            claimed = True
+        elif build:
+            for table in ("missions", "goal_progress", "sleep_logs", "checkpoint_history"):
+                db.execute(f"DELETE FROM {table} WHERE user_id=?", (guest_build_id,))
+            db.execute("DELETE FROM users WHERE id=?", (guest_build_id,))
+        db.execute("DELETE FROM accounts WHERE id=?", (guest_account_id,))
+
+    db.commit()
+    session.clear()
+    session["account_id"] = account_id
+    if claimed:
+        session["user_id"] = guest_build_id
+    return claimed
 
 
 def list_builds(account_id):
@@ -372,9 +464,22 @@ def register():
     if existing:
         return render_template("register.html", erro="Esse e-mail já tem uma conta. Tente entrar.")
 
+    if session.get("is_guest") and session.get("account_id"):
+        # upgrade: a conta-convidado atual vira a conta de verdade, no mesmo
+        # id -- a build (e todo o progresso) que ja existir continua igual,
+        # nao precisa de nenhuma migracao de dados.
+        account_id = session["account_id"]
+        db.execute(
+            "UPDATE accounts SET email=?, password_hash=?, is_guest=0 WHERE id=?",
+            (email, generate_password_hash(password), account_id),
+        )
+        db.commit()
+        session["is_guest"] = False
+        return redirect(url_for("index"))
+
     account_id = str(uuid.uuid4())
     db.execute(
-        "INSERT INTO accounts (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO accounts (id, email, password_hash, is_guest, created_at) VALUES (?, ?, ?, 0, ?)",
         (account_id, email, generate_password_hash(password), date.today().isoformat()),
     )
     db.commit()
@@ -392,16 +497,86 @@ def login():
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     db = get_db()
-    row = db.execute("SELECT * FROM accounts WHERE email=?", (email,)).fetchone()
-    if row is None or not check_password_hash(row["password_hash"], password):
+    row = db.execute("SELECT * FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
+    if row is None or not row["password_hash"] or not check_password_hash(row["password_hash"], password):
         return render_template("login.html", erro="E-mail ou senha incorretos.")
-    session.clear()
-    session["account_id"] = row["id"]
+    _attach_session_to_account(row["id"])
     return redirect(url_for("index"))
+
+
+@app.route("/auth/google", methods=["POST"])
+def auth_google():
+    if not GOOGLE_LOGIN_ENABLED:
+        return jsonify({"error": "login com Google não está configurado neste servidor"}), 400
+
+    payload = request.get_json(silent=True) or {}
+    credential = payload.get("credential")
+    if not credential:
+        return jsonify({"error": "credencial ausente"}), 400
+
+    try:
+        info = google_id_token.verify_oauth2_token(
+            credential, google_auth_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except Exception:
+        return jsonify({"error": "não foi possível validar o login do Google"}), 400
+
+    email = (info.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "essa conta do Google não tem e-mail disponível"}), 400
+    if info.get("email_verified") is False:
+        return jsonify({"error": "e-mail do Google ainda não verificado"}), 400
+    google_sub = info.get("sub")
+    nome = info.get("given_name") or info.get("name") or "Herói(ína)"
+
+    db = get_db()
+    row = db.execute("SELECT * FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
+
+    if row:
+        if not row["google_sub"]:
+            db.execute("UPDATE accounts SET google_sub=? WHERE id=?", (google_sub, row["id"]))
+            db.commit()
+        _attach_session_to_account(row["id"])
+        return jsonify({"ok": True, "redirect": url_for("index")})
+
+    if session.get("is_guest") and session.get("account_id"):
+        account_id = session["account_id"]
+        db.execute(
+            "UPDATE accounts SET email=?, google_sub=?, is_guest=0 WHERE id=?",
+            (email, google_sub, account_id),
+        )
+        db.commit()
+        session["is_guest"] = False
+        return jsonify({"ok": True, "redirect": url_for("index")})
+
+    account_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO accounts (id, email, password_hash, google_sub, is_guest, created_at) "
+        "VALUES (?, ?, NULL, ?, 0, ?)",
+        (account_id, email, google_sub, date.today().isoformat()),
+    )
+    db.commit()
+    session.clear()
+    session["account_id"] = account_id
+    build_id = create_build(account_id, build_name="Minha build", nome=nome)
+    session["user_id"] = build_id
+    return jsonify({"ok": True, "redirect": url_for("index")})
 
 
 @app.route("/logout")
 def logout():
+    if session.get("is_guest") and session.get("account_id"):
+        # sessao de teste que nunca virou conta -- nao faz sentido deixar
+        # esse lixo acumulando no banco, entao apaga tudo ao sair.
+        db = get_db()
+        account_id = session["account_id"]
+        build_id = session.get("user_id")
+        if build_id:
+            for table in ("missions", "goal_progress", "sleep_logs", "checkpoint_history"):
+                db.execute(f"DELETE FROM {table} WHERE user_id=?", (build_id,))
+            db.execute("DELETE FROM users WHERE id=?", (build_id,))
+        db.execute("DELETE FROM accounts WHERE id=?", (account_id,))
+        db.commit()
     session.clear()
     return redirect(url_for("login"))
 
@@ -412,7 +587,7 @@ def logout():
 # apaga todos os dados ligados a ela (missoes, progresso, sono, checkpoints).
 # ---------------------------------------------------------------------------
 @app.route("/builds")
-@login_required
+@real_account_required
 def builds_page():
     account_id = session["account_id"]
     ensure_active_build()
@@ -427,7 +602,7 @@ def builds_page():
 
 
 @app.route("/builds/new", methods=["POST"])
-@login_required
+@real_account_required
 def builds_new():
     account_id = session["account_id"]
     nome = request.form.get("nome", "").strip() or "Herói(ína)"
@@ -438,7 +613,7 @@ def builds_new():
 
 
 @app.route("/builds/<build_id>/select", methods=["POST"])
-@login_required
+@real_account_required
 def builds_select(build_id):
     db = get_db()
     row = db.execute(
@@ -452,7 +627,7 @@ def builds_select(build_id):
 
 
 @app.route("/builds/<build_id>/delete", methods=["POST"])
-@login_required
+@real_account_required
 def builds_delete(build_id):
     db = get_db()
     row = db.execute(
@@ -487,7 +662,7 @@ def next_onboarding_step(user):
 
 
 @app.route("/")
-@login_required
+@guest_allowed
 def index():
     user = get_user()
     if user["onboarding_complete"]:
@@ -497,7 +672,7 @@ def index():
 
 # --- Passo I: areas -----------------------------------------------------
 @app.route("/onboarding/areas", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def step_areas():
     user = get_user()
     if request.method == "GET":
@@ -535,7 +710,7 @@ def step_areas():
 
 # --- Passo condicional: Paideia (se nenhum objetivo fisico foi escolhido) ---
 @app.route("/onboarding/paideia", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def step_paideia():
     user = get_user()
     if "saude" in user["areas"]:
@@ -562,7 +737,7 @@ def step_paideia():
 
 # --- Passo II: objetivos por area (multi-selecao) -------------------------
 @app.route("/onboarding/goals", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def step_goals():
     user = get_user()
     if not user["areas"]:
@@ -610,7 +785,7 @@ def step_goals():
 
 # --- Passo III: informacoes basicas, pesos por area e dieta --------------
 @app.route("/onboarding/info", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def step_info():
     user = get_user()
     pending_goals = [a for a in user["areas"]
@@ -656,7 +831,7 @@ def step_info():
 
 # --- Passo IV: panorama / revisao final -----------------------------------
 @app.route("/onboarding/panorama", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def step_panorama():
     user = get_user()
     if not user["basic_info"].get("tempo_livre_min"):
@@ -836,7 +1011,7 @@ def rollover_pending_days(user):
 # Dashboard
 # ---------------------------------------------------------------------------
 @app.route("/dashboard")
-@login_required
+@guest_allowed
 def dashboard():
     user = get_user()
     if not user["onboarding_complete"]:
@@ -943,7 +1118,7 @@ def dashboard():
 
 
 @app.route("/plano")
-@login_required
+@guest_allowed
 def plano():
     user = get_user()
     if not user["onboarding_complete"]:
@@ -994,7 +1169,7 @@ def plano():
 # Checkpoint de fim de ciclo (autoavaliacao 0-10 por tema)
 # ---------------------------------------------------------------------------
 @app.route("/checkpoint", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def checkpoint():
     user = get_user()
     db = get_db()
@@ -1111,7 +1286,7 @@ def _get_or_generate_quiz(mission, user, n):
 
 
 @app.route("/quiz/<int:mission_id>", methods=["GET", "POST"])
-@login_required
+@guest_allowed
 def quiz(mission_id):
     db = get_db()
     user = get_user()
@@ -1158,7 +1333,7 @@ def quiz(mission_id):
 # APIs de interacao diaria
 # ---------------------------------------------------------------------------
 @app.route("/api/log_mission/<int:mission_id>", methods=["POST"])
-@login_required
+@guest_allowed
 def log_mission(mission_id):
     db = get_db()
     user_id = session["user_id"]
@@ -1188,7 +1363,7 @@ def log_mission(mission_id):
 
 
 @app.route("/log_sleep", methods=["POST"])
-@login_required
+@guest_allowed
 def log_sleep():
     user_id = session["user_id"]
     horas = request.form.get("horas")

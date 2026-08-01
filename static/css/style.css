@@ -68,6 +68,11 @@ body {
     font-size: 13px;
     color: var(--text);
 }
+.lb-header__guest-tag {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 2px 8px;
+}
+.lb-header__right { display: flex; align-items: center; gap: 10px; }
 .lb-header-actions { display: flex; align-items: center; gap: 10px; }
 .lb-steps { display: flex; gap: 8px; }
 .lb-step {
@@ -648,6 +653,14 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-auth { max-width: 420px; }
 .lb-auth__switch { font-size: 13px; color: var(--text-dim); margin-top: 18px; }
 .lb-auth__switch a { color: var(--neon-bright); }
+.lb-auth__google { display: flex; justify-content: center; margin: 4px 0 4px; }
+.lb-auth__google .lb-error { text-align: center; margin-top: 8px; }
+.lb-auth__divider {
+    display: flex; align-items: center; gap: 12px; margin: 20px 0;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim);
+}
+.lb-auth__divider::before, .lb-auth__divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 /* ---------- SLIDER "VOLUME BAR" (missões, checkpoint, pesos) ---------- */
 .lb-volume-slider {
@@ -738,6 +751,20 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
     color: var(--text); padding: 8px 10px; border-radius: var(--radius); font-family: var(--font-body);
 }
 .lb-rest-banner { color: var(--text-dim); font-style: italic; justify-content: flex-start; }
+
+.lb-guest-banner {
+    max-width: 1180px; margin: 0 auto 20px; padding: 16px 20px;
+    border: 1px solid var(--warn); border-radius: var(--radius);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    font-size: 13.5px;
+}
+.lb-guest-banner__title {
+    margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--warn);
+}
+.lb-guest-banner p { margin: 0; color: var(--text-dim); line-height: 1.5; max-width: 620px; }
+.lb-guest-banner__actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 /* ---------- QUIZ IN-APP ---------- */
 .lb-quiz-question { margin-bottom: 4px; }

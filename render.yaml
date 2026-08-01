@@ -27,5 +27,7 @@ services:
         sync: false
       - key: DEEPSEEK_MODEL
         value: deepseek-chat
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: FLASK_DEBUG
         value: "0"

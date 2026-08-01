@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if google_client_id %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
 </head>
 <body>
     <canvas id="bg-canvas" aria-hidden="true"></canvas>
@@ -14,8 +15,14 @@
         <div class="lb-header__brand">
             <span class="lb-header__mark">⟠</span>
             <span class="lb-header__name">LIFE BUILDER</span>
+            {% if is_guest %}<span class="lb-header__guest-tag">modo teste</span>{% endif %}
         </div>
-        {% block header_extra %}{% endblock %}
+        <div class="lb-header__right">
+            {% block header_extra %}{% endblock %}
+            {% if is_guest %}
+            <a href="{{ url_for('login') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Já tem conta? Entrar</a>
+            {% endif %}
+        </div>
     </header>
     <main class="lb-main">
         {% block content %}{% endblock %}

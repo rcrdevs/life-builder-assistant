@@ -4,11 +4,26 @@
 <div class="lb-header-actions">
     <a href="{{ url_for('step_panorama') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Editar build</a>
     <a href="{{ url_for('plano') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Ver plano completo</a>
+    {% if not is_guest %}
     <a href="{{ url_for('builds_page') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Minhas builds</a>
-    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
+    {% endif %}
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">{{ "Sair do teste" if is_guest else "Sair" }}</a>
 </div>
 {% endblock %}
 {% block content %}
+
+{% if is_guest %}
+<div class="lb-guest-banner">
+    <div>
+        <p class="lb-guest-banner__title">Você está no modo teste.</p>
+        <p>Sua build e seu progresso existem só nesta sessão — se você limpar os cookies ou trocar de navegador, perde tudo. Crie uma conta pra guardar isso de verdade (o que já está feito continua igual).</p>
+    </div>
+    <div class="lb-guest-banner__actions">
+        <a href="{{ url_for('register') }}" class="lb-btn lb-btn--primary lb-btn--sm">Salvar minha build →</a>
+        <a href="{{ url_for('login') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Já tenho conta</a>
+    </div>
+</div>
+{% endif %}
 
 {% if ai_strategy %}
 <div class="lb-ai-note">

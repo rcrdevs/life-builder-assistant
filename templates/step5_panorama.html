@@ -47,6 +47,10 @@
             <textarea name="notas" rows="3" placeholder="Ex: tenho uma lesão no joelho, prefiro estudar à noite, viajo bastante a trabalho...">{{ user.extra_info.panorama_notes or '' }}</textarea>
         </label>
 
+        {% if is_guest and not user.onboarding_complete %}
+        <p class="lb-hint">Você está no modo teste — dá pra gerar sua build sem criar conta agora. Se quiser guardar o progresso depois, é só criar uma conta no seu painel.</p>
+        {% endif %}
+
         <div class="lb-form-actions">
             <a href="{{ url_for('step_info') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
             <button type="submit" class="lb-btn lb-btn--primary">
