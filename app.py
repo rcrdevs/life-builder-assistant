@@ -494,13 +494,13 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("login.html")
+        return redirect(url_for("index"))
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     db = get_db()
     row = db.execute("SELECT * FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
     if row is None or not row["password_hash"] or not check_password_hash(row["password_hash"], password):
-        return render_template("login.html", erro="E-mail ou senha incorretos.")
+        return render_template("welcome.html", erro="E-mail ou senha incorretos.")
     _attach_session_to_account(row["id"])
     return redirect(url_for("index"))
 
@@ -579,7 +579,7 @@ def logout():
         db.execute("DELETE FROM accounts WHERE id=?", (account_id,))
         db.commit()
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("index"))
 
 
 # ---------------------------------------------------------------------------

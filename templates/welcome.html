@@ -6,6 +6,8 @@
     <h1 class="lb-title">Sua vida, em forma de build.</h1>
     <p class="lb-lede">Áreas, metas e missões diárias organizadas como um RPG de verdade — com ciclos de 14 dias e progresso que você acompanha de perto.</p>
 
+    {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
+
     {% if google_client_id %}
     <div class="lb-auth__google">
         <div id="g_id_onload"
@@ -16,14 +18,24 @@
              data-text="signin_with" data-shape="rectangular" data-logo_alignment="left"></div>
         <p class="lb-error" data-google-error></p>
     </div>
-    <p class="lb-auth__divider"><span>ou</span></p>
+    <p class="lb-auth__divider"><span>ou com e-mail</span></p>
     <script src="{{ url_for('static', filename='js/google_auth.js') }}"></script>
     {% endif %}
 
-    <div class="lb-welcome__actions">
-        <a href="{{ url_for('login') }}" class="lb-btn lb-btn--primary">Entrar</a>
-        <a href="{{ url_for('register') }}" class="lb-btn lb-btn--ghost">Criar conta</a>
-    </div>
+    <form method="post" action="{{ url_for('login') }}" class="lb-form">
+        <label class="lb-field">
+            <span>E-mail</span>
+            <input type="email" name="email" required autofocus>
+        </label>
+        <label class="lb-field">
+            <span>Senha</span>
+            <input type="password" name="password" required>
+        </label>
+        <div class="lb-welcome__actions">
+            <button type="submit" class="lb-btn lb-btn--primary">Entrar →</button>
+            <a href="{{ url_for('register') }}" class="lb-btn lb-btn--ghost">Criar conta</a>
+        </div>
+    </form>
 
     <p class="lb-welcome__guest">
         <a href="{{ url_for('guest_start') }}">Testar sem criar conta</a>
