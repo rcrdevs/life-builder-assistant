@@ -662,6 +662,12 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 }
 .lb-auth__divider::before, .lb-auth__divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
+.lb-welcome__actions { display: flex; gap: 12px; margin-top: 6px; }
+.lb-welcome__actions .lb-btn { flex: 1; text-align: center; }
+.lb-welcome__guest { margin-top: 20px; text-align: center; font-size: 13px; color: var(--text-dim); }
+.lb-welcome__guest a { color: var(--neon-bright); }
+.lb-welcome__guest span { display: block; font-size: 11.5px; margin-top: 2px; opacity: 0.8; }
+
 /* ---------- SLIDER "VOLUME BAR" (missões, checkpoint, pesos) ---------- */
 .lb-volume-slider {
     -webkit-appearance: none;
@@ -783,3 +789,78 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-quiz-review__resposta { font-size: 13px; color: var(--text-dim); margin: 0 0 8px; line-height: 1.5; }
 .lb-quiz-review__item--ok .lb-quiz-review__resposta { color: var(--ok); }
 .lb-quiz-review__fonte { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); margin: 0; }
+
+/* ---------- ASSISTENTE (companheiro flutuante) ---------- */
+.lb-assistant {
+    position: fixed;
+    left: 50%; top: 50%;
+    width: 60px; height: 60px;
+    transform: translate(-50%, -50%);
+    z-index: 80;
+    transition: left 3.2s cubic-bezier(.45, 0, .2, 1), top 3.2s cubic-bezier(.45, 0, .2, 1);
+    pointer-events: none;
+}
+.lb-assistant__icon {
+    position: relative;
+    display: block; width: 100%; height: 100%;
+    padding: 0; border: 0; background: transparent; cursor: pointer;
+    pointer-events: auto;
+}
+.lb-assistant__icon svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.lb-assistant__ring { fill: none; }
+.lb-assistant__ring--outer {
+    stroke: var(--neon); stroke-width: 1.6; opacity: 0.75;
+    transform-box: fill-box; transform-origin: center;
+    animation: lb-assistant-spin 10s linear infinite;
+}
+.lb-assistant__inner-spin {
+    transform-box: fill-box; transform-origin: center;
+    animation: lb-assistant-spin-rev 5.5s linear infinite;
+}
+.lb-assistant__ring--inner { stroke: var(--neon-bright); stroke-width: 2; opacity: 0.85; }
+.lb-assistant__core { fill: var(--neon-bright); opacity: 0.5; }
+
+.lb-assistant--speaking .lb-assistant__ring--outer {
+    stroke: var(--neon-bright);
+    filter: drop-shadow(0 0 5px var(--neon-glow));
+}
+.lb-assistant--speaking .lb-assistant__inner-spin {
+    animation: lb-assistant-spin-rev 1.8s linear infinite;
+}
+.lb-assistant--speaking .lb-assistant__ring--inner,
+.lb-assistant--speaking .lb-assistant__core {
+    animation: lb-assistant-vibrate 0.45s ease-in-out infinite;
+    filter: drop-shadow(0 0 7px var(--neon-bright));
+}
+
+@keyframes lb-assistant-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes lb-assistant-spin-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+@keyframes lb-assistant-vibrate {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.22); opacity: 1; }
+}
+
+.lb-assistant__bubble {
+    position: absolute; bottom: 100%; left: 50%;
+    margin-bottom: 12px;
+    min-width: 170px; max-width: 240px;
+    background: var(--surface); border: 1px solid var(--neon);
+    border-radius: 10px; padding: 10px 13px;
+    font-size: 12.5px; line-height: 1.45; color: var(--text);
+    box-shadow: 0 0 16px var(--neon-glow);
+    opacity: 0; transform: translate(-50%, 6px);
+    transition: opacity .35s ease, transform .35s ease;
+    pointer-events: none;
+}
+.lb-assistant__bubble p { margin: 0; }
+.lb-assistant__bubble::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--neon);
+}
+.lb-assistant--speaking .lb-assistant__bubble { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 640px) {
+    .lb-assistant { width: 46px; height: 46px; }
+    .lb-assistant__bubble { max-width: 190px; font-size: 12px; }
+}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Life Builder{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-auth lb-welcome">
+    <p class="lb-eyebrow">Life Builder</p>
+    <h1 class="lb-title">Sua vida, em forma de build.</h1>
+    <p class="lb-lede">Áreas, metas e missões diárias organizadas como um RPG de verdade — com ciclos de 14 dias e progresso que você acompanha de perto.</p>
+
+    {% if google_client_id %}
+    <div class="lb-auth__google">
+        <div id="g_id_onload"
+             data-client_id="{{ google_client_id }}"
+             data-callback="onGoogleCredential"
+             data-auto_prompt="false"></div>
+        <div class="g_id_signin" data-type="standard" data-theme="outline" data-size="large"
+             data-text="signin_with" data-shape="rectangular" data-logo_alignment="left"></div>
+        <p class="lb-error" data-google-error></p>
+    </div>
+    <p class="lb-auth__divider"><span>ou</span></p>
+    <script src="{{ url_for('static', filename='js/google_auth.js') }}"></script>
+    {% endif %}
+
+    <div class="lb-welcome__actions">
+        <a href="{{ url_for('login') }}" class="lb-btn lb-btn--primary">Entrar</a>
+        <a href="{{ url_for('register') }}" class="lb-btn lb-btn--ghost">Criar conta</a>
+    </div>
+
+    <p class="lb-welcome__guest">
+        <a href="{{ url_for('guest_start') }}">Testar sem criar conta</a>
+        <span>(sua build não vai ficar salva)</span>
+    </p>
+</section>
+{% endblock %}

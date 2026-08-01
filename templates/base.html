@@ -27,6 +27,10 @@
     <main class="lb-main">
         {% block content %}{% endblock %}
     </main>
+    {% if show_assistant %}
+        {% include "_assistant.html" %}
+        <script src="{{ url_for('static', filename='js/assistant.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/background.js') }}"></script>
 </body>
 </html>

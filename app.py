@@ -53,6 +53,7 @@ def inject_session_flags():
     return {
         "is_guest": bool(session.get("is_guest")),
         "google_client_id": GOOGLE_CLIENT_ID if GOOGLE_LOGIN_ENABLED else "",
+        "show_assistant": bool(session.get("user_id")),
     }
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")
@@ -662,12 +663,21 @@ def next_onboarding_step(user):
 
 
 @app.route("/")
-@guest_allowed
 def index():
     user = get_user()
+    if user is None:
+        return render_template("welcome.html")
     if user["onboarding_complete"]:
         return redirect(url_for("dashboard"))
     return redirect(next_onboarding_step(user))
+
+
+@app.route("/guest/start")
+def guest_start():
+    if not session.get("account_id"):
+        session["account_id"] = create_guest_account()
+        session["is_guest"] = True
+    return redirect(url_for("index"))
 
 
 # --- Passo I: areas -----------------------------------------------------
