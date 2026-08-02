@@ -49,6 +49,17 @@ app.secret_key = os.environ.get("SECRET_KEY", "life-builder-prototype-secret-key
 # nao e segura e o cookie de sessao se comporta de forma inconsistente.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+# Esse app pode ser aberto direto OU embutido num iframe de outro dominio
+# (e o caso da "Oficina", que embute varios projetos numa pagina so). Cookie
+# de sessao com SameSite=Lax (o padrao do Flask) e bloqueado pelo navegador
+# dentro de iframe cross-origin -- sem isso, o modo convidado cria a conta
+# mas o cookie nunca volta pro servidor, e a pagina fica recarregando em
+# loop. SameSite=None exige Secure=True (cookie so trafega em HTTPS), entao
+# so ligamos isso fora do modo debug local (que roda em HTTP).
+_IS_PROD = os.environ.get("FLASK_DEBUG", "1") != "1"
+app.config["SESSION_COOKIE_SAMESITE"] = "None" if _IS_PROD else "Lax"
+app.config["SESSION_COOKIE_SECURE"] = _IS_PROD
+
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_LOGIN_ENABLED = bool(GOOGLE_CLIENT_ID) and GOOGLE_AUTH_LIB_AVAILABLE
 
