@@ -55,8 +55,10 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # dentro de iframe cross-origin -- sem isso, o modo convidado cria a conta
 # mas o cookie nunca volta pro servidor, e a pagina fica recarregando em
 # loop. SameSite=None exige Secure=True (cookie so trafega em HTTPS), entao
-# so ligamos isso fora do modo debug local (que roda em HTTP).
-_IS_PROD = os.environ.get("FLASK_DEBUG", "1") != "1"
+# so ligamos isso em producao (rodando em HTTP local, Secure quebraria o
+# cookie). "RENDER" e uma variavel que o proprio Render sempre define
+# sozinho (nao depende de configurar nada no dashboard).
+_IS_PROD = os.environ.get("RENDER") == "true" or os.environ.get("FLASK_DEBUG", "1") != "1"
 app.config["SESSION_COOKIE_SAMESITE"] = "None" if _IS_PROD else "Lax"
 app.config["SESSION_COOKIE_SECURE"] = _IS_PROD
 
