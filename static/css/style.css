@@ -165,11 +165,28 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-goal-group { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin: 0; }
 .lb-goal-group legend { font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--chrome-bright); padding: 0 8px; text-transform: uppercase; }
 .lb-goal-options { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-start; }
-.lb-goal-option { display: flex; flex-direction: column; gap: 6px; }
+.lb-goal-option { display: flex; flex-direction: column; gap: 0; }
+.lb-goal-option:has(.lb-radio-pill input:checked) { gap: 6px; }
 .lb-goal-option__detail {
     background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
-    padding: 7px 10px; border-radius: var(--radius); font-family: var(--font-body);
+    border-radius: var(--radius); font-family: var(--font-body);
     font-size: 12px; width: 240px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    max-height: 0;
+    border-width: 0;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: max-height .25s ease, opacity .2s ease, padding .25s ease, border-width .15s ease;
+}
+.lb-goal-option:has(.lb-radio-pill input:checked) .lb-goal-option__detail {
+    max-height: 44px;
+    padding: 7px 10px;
+    border-width: 1px;
+    opacity: 1;
+    pointer-events: auto;
 }
 .lb-goal-option__detail:focus { outline: none; border-color: var(--neon); }
 .lb-radio-pill {

@@ -70,12 +70,69 @@
         }, 5400);
     }
 
-    function roam() {
-        var x = 8 + Math.random() * 82;   // vw, evita colar nas bordas
-        var y = 16 + Math.random() * 62;  // vh, evita o header e o rodapé
-        el.style.left = x + "vw";
-        el.style.top = y + "vh";
+    var MAIN_MAX_WIDTH = 1180; // precisa bater com --lb-main max-width no CSS
+    var EDGE_GAP = 14;         // respiro entre o assistente e a borda da tela
+    var mainEl = document.querySelector(".lb-main");
+    var headerEl = document.querySelector(".lb-header");
+
+    // Calcula as faixas "fora" da interface (fora do miolo central onde ficam
+    // os cards/botões) onde o assistente pode ficar parado. Ele ainda pode
+    // atravessar por cima da interface durante a transição (é só o destino
+    // final que respeita essas faixas) -- a transição CSS do .lb-assistant
+    // cuida de deslizar suavemente de um lado a outro.
+    function safeZones() {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var half = (el.offsetWidth || 60) / 2;
+        var sideGap = Math.max(0, (vw - MAIN_MAX_WIDTH) / 2);
+        var headerH = (headerEl && headerEl.offsetHeight) || 70;
+        var yMin = headerH + EDGE_GAP + half;
+        var yMax = vh - EDGE_GAP - half;
+        var zones = [];
+
+        if (sideGap > half * 2 + EDGE_GAP && yMax > yMin) {
+            zones.push({ xMin: EDGE_GAP + half, xMax: sideGap - EDGE_GAP - half, yMin: yMin, yMax: yMax });
+            zones.push({ xMin: vw - sideGap + EDGE_GAP + half, xMax: vw - EDGE_GAP - half, yMin: yMin, yMax: yMax });
+        }
+
+        // Tela estreita (sem margem lateral livre): usa a faixa abaixo do
+        // conteúdo principal quando ele for mais baixo que a viewport.
+        if (!zones.length && mainEl) {
+            var mainBottom = mainEl.getBoundingClientRect().bottom;
+            if (mainBottom + half + EDGE_GAP < vh) {
+                zones.push({
+                    xMin: EDGE_GAP + half, xMax: vw - EDGE_GAP - half,
+                    yMin: mainBottom + EDGE_GAP + half, yMax: vh - EDGE_GAP - half,
+                });
+            }
+        }
+
+        return zones;
     }
+
+    function roam() {
+        var zones = safeZones();
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var half = (el.offsetWidth || 60) / 2;
+        var x, y;
+
+        if (zones.length) {
+            var zone = zones[Math.floor(Math.random() * zones.length)];
+            x = zone.xMin + Math.random() * Math.max(0, zone.xMax - zone.xMin);
+            y = zone.yMin + Math.random() * Math.max(0, zone.yMax - zone.yMin);
+        } else {
+            // Sem faixa livre (mobile/tela pequena): mantém o guia discreto
+            // num canto, fora do caminho dos botões.
+            x = vw - EDGE_GAP - half;
+            y = vh - EDGE_GAP - half;
+        }
+
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+    }
+
+    window.addEventListener("resize", roam);
 
     roam();
     setInterval(roam, 8000 + Math.random() * 5000);

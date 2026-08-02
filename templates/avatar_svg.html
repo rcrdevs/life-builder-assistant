@@ -11,7 +11,7 @@
 
     <polygon points="30,296 190,296 175,268 45,268" fill="#0A0F16" stroke="#2F7BFF" stroke-width="1" opacity="0.9"/>
     <text x="110" y="286" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10"
-          fill="#6FA8FF" letter-spacing="2" style="text-transform:uppercase">{{ user.nome[:16] if user and user.nome else 'HERÓI(ÍNA)' }}</text>
+          fill="#6FA8FF" letter-spacing="2" style="text-transform:uppercase">{{ user.nome[:16] if user and user.nome else '' }}</text>
 
     <polygon id="aura" points="110,18 147,44 147,96 110,122 73,96 73,44" fill="none" stroke="#2F7BFF" stroke-width="1.4" opacity="0" filter="url(#lb-glow)"/>
 

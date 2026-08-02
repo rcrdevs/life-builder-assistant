@@ -387,7 +387,7 @@ def ensure_active_build():
     return new_id
 
 
-def create_build(account_id, build_name="Nova build", nome="Herói(ína)"):
+def create_build(account_id, build_name="Nova build", nome=""):
     db = get_db()
     build_id = str(uuid.uuid4())
     db.execute(
@@ -471,7 +471,7 @@ def register():
         return render_template("register.html")
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
-    nome = request.form.get("nome", "").strip() or "Herói(ína)"
+    nome = request.form.get("nome", "").strip()
     if not email or not password:
         return render_template("register.html", erro="Preencha e-mail e senha.")
 
@@ -543,7 +543,7 @@ def auth_google():
     if info.get("email_verified") is False:
         return jsonify({"error": "e-mail do Google ainda não verificado"}), 400
     google_sub = info.get("sub")
-    nome = info.get("given_name") or info.get("name") or "Herói(ína)"
+    nome = info.get("given_name") or info.get("name") or ""
 
     db = get_db()
     row = db.execute("SELECT * FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
@@ -621,7 +621,7 @@ def builds_page():
 @real_account_required
 def builds_new():
     account_id = session["account_id"]
-    nome = request.form.get("nome", "").strip() or "Herói(ína)"
+    nome = request.form.get("nome", "").strip()
     build_name = request.form.get("build_name", "").strip() or f"Build {len(list_builds(account_id)) + 1}"
     build_id = create_build(account_id, build_name=build_name, nome=nome)
     session["user_id"] = build_id
@@ -703,7 +703,7 @@ def step_areas():
     if request.method == "GET":
         return render_template("step1_areas.html", areas=AREAS, area_icons=AREA_ICONS, user=user, current_step=1)
 
-    nome = request.form.get("nome", "").strip() or user["nome"] or "Heroi(ina)"
+    nome = request.form.get("nome", "").strip() or user["nome"] or ""
     areas = request.form.getlist("areas")
     custom_area_labels = dict(user["custom_area_labels"])
     goals = dict(user["goals"])
