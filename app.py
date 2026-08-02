@@ -17,6 +17,7 @@ load_dotenv()  # sem efeito se .env nao existir (ex: Docker, onde as variaveis j
 import psycopg2
 import psycopg2.extras
 from flask import Flask, g, redirect, render_template, request, session, url_for, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from data import (
@@ -43,6 +44,10 @@ except ImportError:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "life-builder-prototype-secret-key")  # troque em producao (ver .env.example)
+# Render (como Heroku/etc.) termina o HTTPS num proxy e repassa a requisicao
+# por HTTP internamente -- sem isso, o Flask as vezes acha que a conexao
+# nao e segura e o cookie de sessao se comporta de forma inconsistente.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_LOGIN_ENABLED = bool(GOOGLE_CLIENT_ID) and GOOGLE_AUTH_LIB_AVAILABLE
@@ -125,15 +130,12 @@ def close_db(exception=None):
 
 def _ensure_columns(db, table, coldefs):
     """Auto-migracao leve: adiciona colunas que faltam em uma tabela existente.
-    Evita o app quebrar com coluna ausente quando o schema evolui entre versoes."""
-    existing = {
-        row["column_name"] for row in db.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = %s", (table,)
-        ).fetchall()
-    }
+    Evita o app quebrar com coluna ausente quando o schema evolui entre versoes.
+    Usa "IF NOT EXISTS" porque o gunicorn sobe varios workers (ver Dockerfile)
+    e cada um roda essa migracao na inicializacao -- sem isso, dois workers
+    tentando adicionar a mesma coluna ao mesmo tempo derrubavam um deles."""
     for col, decl in coldefs.items():
-        if col not in existing:
-            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+        db.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {decl}")
 
 
 def init_db():

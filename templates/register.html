@@ -31,16 +31,16 @@
         {% if not is_guest %}
         <label class="lb-field">
             <span>Como podemos te chamar?</span>
-            <input type="text" name="nome" placeholder="Seu nome ou apelido" required>
+            <input type="text" name="nome" placeholder="Seu nome ou apelido" required autocomplete="given-name">
         </label>
         {% endif %}
         <label class="lb-field">
             <span>E-mail</span>
-            <input type="email" name="email" required>
+            <input type="email" name="email" required autocomplete="email">
         </label>
         <label class="lb-field">
             <span>Senha</span>
-            <input type="password" name="password" required minlength="4">
+            <input type="password" name="password" required minlength="4" autocomplete="new-password">
         </label>
         <button type="submit" class="lb-btn lb-btn--primary">{{ "Salvar minha build →" if is_guest else "Criar conta →" }}</button>
     </form>

@@ -25,11 +25,11 @@
     <form method="post" action="{{ url_for('login') }}" class="lb-form">
         <label class="lb-field">
             <span>E-mail</span>
-            <input type="email" name="email" required autofocus>
+            <input type="email" name="email" required autofocus autocomplete="email">
         </label>
         <label class="lb-field">
             <span>Senha</span>
-            <input type="password" name="password" required>
+            <input type="password" name="password" required autocomplete="current-password">
         </label>
         <div class="lb-welcome__actions">
             <button type="submit" class="lb-btn lb-btn--primary">Entrar →</button>
