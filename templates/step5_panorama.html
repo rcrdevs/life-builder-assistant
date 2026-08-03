@@ -12,7 +12,18 @@
         <div class="lb-panorama-card">
             <span class="lb-panorama-card__icon">{{ item.icon }}</span>
             <div>
-                <p class="lb-panorama-card__area">{{ item.area_label }} <span class="lb-panorama-card__peso">{{ item.tier_label }} · peso {{ item.peso }}</span></p>
+                <p class="lb-panorama-card__area">
+                    {{ item.area_label }}
+                    <span class="lb-tier-chip lb-tier-chip--{{ item.tier_key }}" title="{{ item.tier_label }}">
+                        {% if item.tier_key == 'principal' %}
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l2.68 5.86 6.32.67-4.72 4.4 1.28 6.4L12 16.9l-5.56 2.93 1.28-6.4-4.72-4.4 6.32-.67z"/></svg>
+                        {% elif item.tier_key == 'fundo' %}
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 3.2"/></svg>
+                        {% else %}
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 000 18z"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        {% endif %}
+                    </span>
+                </p>
                 <p class="lb-panorama-card__goal">{{ item.goal_label }}</p>
                 <p class="lb-panorama-card__nivel">Nível: {{ item.nivel }}</p>
             </div>
@@ -41,7 +52,8 @@
         </div>
     </div>
 
-    <form method="post" action="{{ url_for('step_panorama') }}" class="lb-form">
+    <form method="post" action="{{ url_for('step_panorama') }}" class="lb-form" id="lb-build-form"
+          data-first-build="{{ 'true' if not user.onboarding_complete else 'false' }}">
         <label class="lb-field">
             <span>Quer adicionar algum detalhe/contexto que não coube nas perguntas acima? (opcional)</span>
             <textarea name="notas" rows="3" placeholder="Ex: tenho uma lesão no joelho, prefiro estudar à noite, viajo bastante a trabalho...">{{ user.extra_info.panorama_notes or '' }}</textarea>
@@ -61,5 +73,24 @@
             </button>
         </div>
     </form>
+
+    <div class="lb-build-loading" id="lb-build-loading" aria-hidden="true">
+        <div class="lb-build-loading__figure">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <polygon class="lb-build-loading__ring-base" points="50,4 92,27 92,73 50,96 8,73 8,27"/>
+                <polygon class="lb-build-loading__ring-progress" id="lb-build-progress-ring"
+                         points="50,4 92,27 92,73 50,96 8,73 8,27" pathLength="100"/>
+                <g class="lb-build-loading__inner-spin">
+                    <polygon class="lb-build-loading__ring-inner" points="50,30 68,40 68,60 50,70 32,60 32,40"/>
+                    <circle class="lb-build-loading__core" cx="50" cy="50" r="4"/>
+                </g>
+            </svg>
+            <span class="lb-build-loading__pct" id="lb-build-loading-pct">0%</span>
+        </div>
+        <p class="lb-build-loading__text" id="lb-build-loading-text">Calculando sua estratégia...</p>
+    </div>
 </section>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/build_loading.js') }}"></script>
 {% endblock %}

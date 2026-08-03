@@ -2,9 +2,18 @@
    áreas fixas quanto para o card "Outro" (nesse caso sempre com key="outro"). #}
 {% set current_tier = user.extra_info.get("area_tiers", {}).get(key, "") %}
 <span class="lb-area-card__tier-tag" data-tier-tag aria-hidden="true"></span>
-<div class="lb-area-tier-picker" data-tier-picker>
+<div class="lb-area-tier-picker" data-tier-picker role="group" aria-label="Prioridade da área">
     <input type="hidden" name="tier_{{ key }}" value="{{ current_tier }}" class="lb-area-tier-input" data-tier-input>
-    <button type="button" class="lb-area-tier-btn" data-tier="principal">Principal</button>
-    <button type="button" class="lb-area-tier-btn" data-tier="secundario">Secundária</button>
-    <button type="button" class="lb-area-tier-btn" data-tier="fundo">Plano de fundo</button>
+    <button type="button" class="lb-area-tier-btn" data-tier="principal" title="Principal" aria-label="Definir como principal">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l2.68 5.86 6.32.67-4.72 4.4 1.28 6.4L12 16.9l-5.56 2.93 1.28-6.4-4.72-4.4 6.32-.67z"/></svg>
+    </button>
+    <button type="button" class="lb-area-tier-btn" data-tier="secundario" title="Secundária" aria-label="Definir como secundária">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M12 3a9 9 0 000 18z"/>
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        </svg>
+    </button>
+    <button type="button" class="lb-area-tier-btn" data-tier="fundo" title="Plano de fundo" aria-label="Definir como plano de fundo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 3.2"/></svg>
+    </button>
 </div>

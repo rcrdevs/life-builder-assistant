@@ -32,6 +32,8 @@ from engine import (
     TOTAL_DAY_MINUTES, quiz_available, pick_quiz_questions, grade_quiz,
 )
 import ai
+import ai_billing
+from ai_billing import FREE_TRIAL_AI_TOKENS
 
 try:
     from google.oauth2 import id_token as google_id_token
@@ -238,6 +240,19 @@ def init_db():
         questions TEXT,
         created_at VARCHAR(32)
     );
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+        id SERIAL PRIMARY KEY,
+        account_id VARCHAR(36),
+        user_id VARCHAR(36),
+        provider VARCHAR(32),
+        model VARCHAR(64),
+        purpose VARCHAR(32),
+        prompt_tokens INT DEFAULT 0,
+        completion_tokens INT DEFAULT 0,
+        total_tokens INT DEFAULT 0,
+        cost_usd DOUBLE PRECISION DEFAULT 0,
+        created_at VARCHAR(32)
+    );
     """)
     # auto-migracao: cobre bancos criados por versoes anteriores do app
     _ensure_columns(db, "users", {
@@ -255,6 +270,12 @@ def init_db():
     _ensure_columns(db, "accounts", {
         "google_sub": "VARCHAR(64)",
         "is_guest": "INT DEFAULT 0",
+        # cota de IA (ver ai_billing.py) -- cada conta comeca com um teste
+        # gratis de N tokens; depois disso a IA e pausada ate o usuario
+        # assinar um plano (ver rota /upgrade).
+        "ai_tokens_granted": f"INT DEFAULT {FREE_TRIAL_AI_TOKENS}",
+        "ai_tokens_used": "DOUBLE PRECISION DEFAULT 0",
+        "ai_plan": "VARCHAR(32) DEFAULT 'trial'",  # trial | paid | blocked
     })
 
     # migracao unica: bancos de versoes anteriores tinham 1 build = 1 conta de
@@ -910,7 +931,8 @@ def step_panorama():
         area_tiers = user["extra_info"].get("area_tiers", {})
         for area in user["areas"]:
             goals_here = user["goals"].get(area) or []
-            tier_label = AREA_TIER_LABELS.get(area_tiers.get(area), "Secundária")
+            tier_key = area_tiers.get(area) or "secundario"
+            tier_label = AREA_TIER_LABELS.get(tier_key, "Secundária")
             if not goals_here:
                 panorama_areas.append({
                     "area": area, "area_label": area_label(user, area),
@@ -919,6 +941,7 @@ def step_panorama():
                     "nivel": NIVEL_LABELS.get(user["niveis"].get(area), "-"),
                     "peso": user["pesos"].get(area, DEFAULT_PESO),
                     "tier_label": tier_label,
+                    "tier_key": tier_key,
                 })
             for goal in goals_here:
                 detalhe = user["goal_details"].get(f"{area}:{goal}")
@@ -932,6 +955,7 @@ def step_panorama():
                     "nivel": NIVEL_LABELS.get(user["niveis"].get(area), "-"),
                     "peso": user["pesos"].get(area, DEFAULT_PESO),
                     "tier_label": tier_label,
+                    "tier_key": tier_key,
                 })
         return render_template("step5_panorama.html", user=user, panorama_areas=panorama_areas,
                                 area_labels=AREAS, diet_type_labels=DIET_TYPE_LABELS, current_step=4)
@@ -963,22 +987,31 @@ def _insert_missions(db, user_id, plan):
 
 
 def _update_ai_strategy(user):
-    """Gera (se a Groq estiver configurada) uma nota curta de estrategia
-    personalizada e salva em extra_info. Falha silenciosamente -- a build
-    funciona 100% sem isso.
+    """Gera (se a Groq estiver configurada e houver cota) uma nota curta de
+    estrategia personalizada e salva em extra_info. Falha silenciosamente --
+    a build funciona 100% sem isso.
 
     Contas-convidado (modo teste) NUNCA disparam chamada de IA: a chave da
     Groq/DeepSeek e unica e compartilhada por todo o app (ver ai.py), entao
     isso e o que evita que trafego anonimo de teste consuma a cota gratuita
-    de quem tem conta de verdade. Ver mensagem equivalente no dashboard."""
+    de quem tem conta de verdade. Ver mensagem equivalente no dashboard.
+
+    Contas com o teste gratis de tokens esgotado (ver ai_billing.py) tambem
+    caem nesse fallback silencioso ate assinarem um plano pago."""
     if session.get("is_guest"):
         return
     if not ai.ai_available():
         return
+    account_id = session.get("account_id")
+    db = get_db()
+    account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+    if not ai_billing.has_quota(account):
+        return
     summary = ai.build_profile_summary(user, area_label, area_goals_label)
-    note = ai.generate_strategy_note(summary)
+    note, usage = ai.generate_strategy_note(summary)
+    if usage:
+        ai_billing.record_usage(db, account_id, user["id"], "groq", ai.GROQ_MODEL, "strategy_note", usage)
     if note:
-        db = get_db()
         extra_info = dict(user["extra_info"])
         extra_info["ai_strategy"] = note
         db.execute("UPDATE users SET extra_info=? WHERE id=?", (json.dumps(extra_info), user["id"]))
@@ -1193,6 +1226,9 @@ def dashboard():
         goal_label_fn=goal_label,
         ai_strategy=user["extra_info"].get("ai_strategy"),
         ai_configured=ai.ai_available(),
+        ai_quota=(ai_billing.get_quota(
+            db.execute("SELECT * FROM accounts WHERE id=?", (session.get("account_id"),)).fetchone()
+        ) if ai.ai_available() and not session.get("is_guest") else None),
     )
 
 
@@ -1346,8 +1382,16 @@ def _get_or_generate_quiz(mission, user, n):
     topic = _quiz_topic_for(user, mission)
     # mesma regra da nota de estrategia: convidado (modo teste) nunca chama a
     # IA, so usuarios com conta -- ver _update_ai_strategy() pro motivo.
-    ai_allowed = ai.quiz_ai_available() and not session.get("is_guest")
-    questions = ai.generate_quiz_questions(topic, n=n) if ai_allowed else None
+    account_id = session.get("account_id")
+    account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone() if account_id else None
+    ai_allowed = (
+        ai.quiz_ai_available()
+        and not session.get("is_guest")
+        and ai_billing.has_quota(account)
+    )
+    questions, usage = ai.generate_quiz_questions(topic, n=n) if ai_allowed else (None, None)
+    if usage:
+        ai_billing.record_usage(db, account_id, user["id"], "deepseek", ai.DEEPSEEK_MODEL, "quiz", usage)
     source = "ia"
     if not questions:
         # fallback: banco estatico generico (so cobre alguns temas fixos, ex.
@@ -1455,14 +1499,34 @@ def log_sleep():
         horas_val = float(horas)
     except (TypeError, ValueError):
         horas_val = None
-    if horas_val is not None:
-        db.execute(
-            "INSERT INTO sleep_logs (user_id, date, horas) VALUES (?, ?, ?) "
-            "ON CONFLICT (user_id, date) DO UPDATE SET horas=EXCLUDED.horas",
-            (user_id, today, horas_val),
-        )
-        db.commit()
+    is_ajax = request.headers.get("X-Requested-With") == "fetch"
+    if horas_val is None or not (0 <= horas_val <= 14):
+        if is_ajax:
+            return jsonify({"ok": False, "error": "horas inválidas"}), 400
+        return redirect(url_for("dashboard"))
+    db.execute(
+        "INSERT INTO sleep_logs (user_id, date, horas) VALUES (?, ?, ?) "
+        "ON CONFLICT (user_id, date) DO UPDATE SET horas=EXCLUDED.horas",
+        (user_id, today, horas_val),
+    )
+    db.commit()
+    if is_ajax:
+        return jsonify({"ok": True, "horas": horas_val})
     return redirect(url_for("dashboard"))
+
+
+@app.route("/upgrade")
+@guest_allowed
+def upgrade():
+    """Pagina informativa de planos -- ainda sem gateway de pagamento
+    integrado (ver ai_billing.py). Serve pra explicar a cota de IA e dar um
+    proximo passo claro quando o teste gratis acaba."""
+    quota = None
+    if not session.get("is_guest"):
+        db = get_db()
+        account = db.execute("SELECT * FROM accounts WHERE id=?", (session["account_id"],)).fetchone()
+        quota = ai_billing.get_quota(account)
+    return render_template("upgrade.html", quota=quota)
 
 
 init_db()

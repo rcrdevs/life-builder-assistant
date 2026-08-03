@@ -1,4 +1,8 @@
-<div class="lb-assistant" id="lb-assistant" data-page="{{ request.endpoint }}" aria-hidden="true">
+<div class="lb-assistant" id="lb-assistant" data-page="{{ request.endpoint }}"
+     data-sleep-prompt="{{ '1' if show_sleep_prompt else '0' }}"
+     data-sleep-url="{{ url_for('log_sleep') }}"
+     data-user-name="{{ user.nome if user else '' }}"
+     aria-hidden="true">
     <div class="lb-assistant__bubble" id="lb-assistant-bubble">
         <p id="lb-assistant-text"></p>
     </div>

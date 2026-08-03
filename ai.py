@@ -28,8 +28,14 @@ MAX_TOKENS = 260
 # esse tipo de chamada JSON maior/estruturada; a nota de estrategia continua
 # na Groq. Ambas seguem o mesmo principio: recurso opcional, com fallback
 # silencioso se a chave nao estiver configurada ou a chamada falhar.
+#
+# ATENCAO: os aliases legados "deepseek-chat"/"deepseek-reasoner" foram
+# DESATIVADOS pela DeepSeek em 24/jul/2026 -- chamadas com esses nomes agora
+# retornam erro. O nome atual e "deepseek-v4-flash" (modo non-thinking, que e
+# o equivalente ao antigo deepseek-chat). Configuravel via env var caso a
+# DeepSeek troque os nomes de novo no futuro.
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 QUIZ_TIMEOUT_SECONDS = 25
 QUIZ_MAX_TOKENS = 2200
@@ -52,11 +58,14 @@ def quiz_ai_available():
 
 def generate_quiz_questions(topic, n=10):
     """Gera `n` questoes de multipla escolha sobre `topic` via DeepSeek.
-    Retorna uma lista de dicts no formato do QUIZ_BANK estatico, ou None se a
-    IA nao estiver configurada / a chamada falhar / a resposta nao vier em
-    JSON valido -- nesses casos quem chamou deve cair para um fallback."""
+    Retorna uma tupla (questions, usage): `questions` e uma lista de dicts no
+    formato do QUIZ_BANK estatico, ou None se a IA nao estiver configurada /
+    a chamada falhar / a resposta nao vier em JSON valido -- nesses casos
+    quem chamou deve cair para um fallback. `usage` e o dict de tokens
+    devolvido pela API (prompt_tokens/completion_tokens/total_tokens), ou
+    None se a chamada nao chegou a acontecer/retornar."""
     if not DEEPSEEK_API_KEY or not topic:
-        return None
+        return None, None
 
     user_prompt = f"Tema: {topic}\nGere {n} questões de múltipla escolha sobre esse tema, com dificuldade variada."
     body = json.dumps({
@@ -68,15 +77,21 @@ def generate_quiz_questions(topic, n=10):
         "max_tokens": QUIZ_MAX_TOKENS,
         "temperature": 0.7,
         "response_format": {"type": "json_object"},
+        # desliga o modo "thinking" do deepseek-v4-flash: queremos a resposta
+        # JSON direto, sem tokens de raciocinio extra (mais rapido e mais
+        # barato -- e o equivalente ao comportamento do antigo deepseek-chat).
+        "thinking": {"type": "disabled"},
     }).encode("utf-8")
 
     req = urllib.request.Request(
         DEEPSEEK_URL, data=body, method="POST",
         headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
     )
+    usage = None
     try:
         with urllib.request.urlopen(req, timeout=QUIZ_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+        usage = data.get("usage")
         raw = data["choices"][0]["message"]["content"].strip()
         parsed = json.loads(raw)
         # aceita tanto uma lista direta quanto {"questoes": [...]} / {"perguntas": [...]}
@@ -86,7 +101,7 @@ def generate_quiz_questions(topic, n=10):
                     parsed = parsed[key]
                     break
         if not isinstance(parsed, list):
-            return None
+            return None, usage
 
         questions = []
         for q in parsed:
@@ -101,10 +116,10 @@ def generate_quiz_questions(topic, n=10):
                 "pergunta": pergunta, "alternativas": alternativas, "correta": correta,
                 "fonte": q.get("fonte") or "Questão-modelo gerada por IA para este tema",
             })
-        return questions or None
+        return (questions or None), usage
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
             ValueError, TimeoutError, TypeError):
-        return None
+        return None, usage
 
 SYSTEM_PROMPT = (
     "Voce e um assistente de planejamento pessoal direto e objetivo, no estilo de um "
@@ -147,11 +162,13 @@ def build_profile_summary(user, area_label_fn, area_goals_label_fn):
 
 
 def generate_strategy_note(profile_summary):
-    """Retorna um paragrafo curto de estrategia personalizada, ou None se a IA nao
-    estiver disponivel/configurada ou a chamada falhar (o app segue funcionando
-    normalmente sem essa nota em qualquer um desses casos)."""
+    """Retorna uma tupla (nota, usage). `nota` e um paragrafo curto de
+    estrategia personalizada, ou None se a IA nao estiver disponivel/
+    configurada ou a chamada falhar (o app segue funcionando normalmente sem
+    essa nota em qualquer um desses casos). `usage` e o dict de tokens da
+    API (ou None se a chamada nao chegou a acontecer/retornar)."""
     if not GROQ_API_KEY or not profile_summary:
-        return None
+        return None, None
 
     body = json.dumps({
         "model": GROQ_MODEL,
@@ -170,6 +187,6 @@ def generate_strategy_note(profile_summary):
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"].strip()
+        return data["choices"][0]["message"]["content"].strip(), data.get("usage")
     except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError, ValueError, TimeoutError):
-        return None
+        return None, None

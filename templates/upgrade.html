@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Planos{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Voltar</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Estratégia por IA</p>
+    <h1 class="lb-title">Seu teste grátis, e o que vem depois dele.</h1>
+    <p class="lb-lede">
+        Toda conta nova começa com um teste grátis de IA (nota de estratégia por ciclo + simulados
+        personalizados por tema). Quando ele acaba, o resto do app continua funcionando 100% normal —
+        missões, pontos e progressão são determinísticos e nunca dependem de IA. Os planos abaixo só
+        liberam a IA de novo.
+    </p>
+
+    {% if quota %}
+    <div class="lb-ai-quota" style="margin: 0 0 28px;">
+        <span>Seu uso no plano atual ({{ quota.plan }}): {{ quota.used }}/{{ quota.granted }} tokens ({{ quota.pct_used }}%)</span>
+    </div>
+    {% endif %}
+
+    <div class="lb-panorama-grid">
+        <div class="lb-panorama-card">
+            <span class="lb-panorama-card__icon">☾</span>
+            <div>
+                <p class="lb-panorama-card__area">Teste grátis</p>
+                <p class="lb-panorama-card__goal">150.000 tokens, uma vez, ao criar a conta. Sem cartão, sem cobrança.</p>
+                <p class="lb-panorama-card__nivel">R$ 0</p>
+            </div>
+        </div>
+        <div class="lb-panorama-card">
+            <span class="lb-panorama-card__icon">◈</span>
+            <div>
+                <p class="lb-panorama-card__area">Starter</p>
+                <p class="lb-panorama-card__goal">1,5 milhão de tokens/mês — cobre uma nota de estratégia por ciclo e alguns simulados por tema, com folga.</p>
+                <p class="lb-panorama-card__nivel">R$ 14,90/mês</p>
+            </div>
+        </div>
+        <div class="lb-panorama-card">
+            <span class="lb-panorama-card__icon">✶</span>
+            <div>
+                <p class="lb-panorama-card__area">Pro</p>
+                <p class="lb-panorama-card__goal">5 milhões de tokens/mês — pra quem gera muitos simulados personalizados ou mantém várias builds.</p>
+                <p class="lb-panorama-card__nivel">R$ 29,90/mês</p>
+            </div>
+        </div>
+    </div>
+
+    <p class="lb-hint">
+        Cobrança ainda não está ativa nesta versão — esta tela é um placeholder para o fluxo de upgrade.
+        Assim que o gateway de pagamento (Stripe/Mercado Pago) for plugado, o botão de assinatura aparece
+        aqui e sua cota é renovada automaticamente todo mês.
+    </p>
+
+    <div class="lb-form-actions">
+        <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">← Voltar ao dashboard</a>
+    </div>
+</section>
+{% endblock %}

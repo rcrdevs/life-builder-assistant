@@ -45,14 +45,23 @@
 </div>
 {% endif %}
 
+{% if ai_quota %}
+    {% if ai_quota.exhausted %}
+    <div class="lb-ai-quota lb-ai-quota--exhausted">
+        <span>Seu teste grátis de IA acabou ({{ ai_quota.used }}/{{ ai_quota.granted }} tokens).</span>
+        <a href="{{ url_for('upgrade') }}">Ver planos →</a>
+    </div>
+    {% elif ai_quota.pct_used >= 70 %}
+    <div class="lb-ai-quota">
+        <span>Teste grátis de IA: {{ ai_quota.pct_used }}% usado</span>
+        <span class="lb-ai-quota__bar"><span style="width: {{ ai_quota.pct_used }}%"></span></span>
+        <a href="{{ url_for('upgrade') }}">Ver planos →</a>
+    </div>
+    {% endif %}
+{% endif %}
+
 {% if show_sleep_prompt %}
-<div class="lb-sleep-banner">
-    <p>Bom te ver de novo, {{ user.nome }}. Quantas horas você dormiu essa noite?</p>
-    <form method="post" action="{{ url_for('log_sleep') }}" class="lb-sleep-banner__form">
-        <input type="number" name="horas" min="0" max="14" step="0.5" placeholder="ex: 7" required>
-        <button type="submit" class="lb-btn lb-btn--primary lb-btn--sm">Registrar</button>
-    </form>
-</div>
+{# a pergunta de sono agora é feita pelo próprio assistente flutuante (ver _assistant.html / assistant.js) #}
 {% endif %}
 
 {% if show_rest_message %}

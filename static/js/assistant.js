@@ -77,6 +77,68 @@
     var lastY = window.innerHeight / 2;
     var EDGE_SAFE = 10; // respiro minimo entre o balao e a borda da tela
 
+    // --- Pergunta interativa (hoje só sono, mas dá pra reaproveitar o
+    // padrão pra outras perguntas rápidas que o assistente possa fazer). ---
+    var sleepPromptActive = el.dataset.sleepPrompt === "1";
+    var sleepUrl = el.dataset.sleepUrl || "/log_sleep";
+    var userName = el.dataset.userName || "";
+
+    function restoreBubble() {
+        bubbleEl.classList.remove("lb-assistant__bubble--interactive");
+        bubbleEl.innerHTML = '<p id="lb-assistant-text"></p>';
+        textEl = document.getElementById("lb-assistant-text");
+    }
+
+    function showSleepPrompt() {
+        clearTimeout(hideTimer);
+        el.classList.add("lb-assistant--speaking");
+        bubbleEl.classList.add("lb-assistant__bubble--interactive");
+        bubbleEl.innerHTML =
+            "<p>Bom te ver de novo" + (userName ? ", " + userName : "") + ". Quantas horas você dormiu essa noite?</p>" +
+            '<div class="lb-assistant__prompt-row">' +
+            '<input type="number" class="lb-assistant__prompt-input" min="0" max="14" step="0.5" placeholder="ex: 7" id="lb-sleep-input">' +
+            '<button type="button" class="lb-assistant__prompt-submit" id="lb-sleep-submit">Registrar</button>' +
+            "</div>";
+        updateBubbleDirection(lastX, lastY);
+
+        var input = document.getElementById("lb-sleep-input");
+        var btn = document.getElementById("lb-sleep-submit");
+        if (input) input.focus();
+
+        function submit() {
+            var val = parseFloat(input.value);
+            if (isNaN(val) || val < 0 || val > 14) {
+                input.focus();
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = "...";
+            fetch(sleepUrl, {
+                method: "POST",
+                headers: { "X-Requested-With": "fetch" },
+                body: new URLSearchParams({ horas: String(val) }),
+            })
+                .then(function (res) { return res.json ? res.json() : { ok: true }; })
+                .catch(function () { return { ok: true }; })
+                .then(function () {
+                    sleepPromptActive = false;
+                    restoreBubble();
+                    say("Anotado — " + val + "h. Isso ajuda a calibrar o ritmo das próximas missões.");
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.textContent = "Registrar";
+                });
+        }
+
+        if (btn) btn.addEventListener("click", submit);
+        if (input) {
+            input.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") { e.preventDefault(); submit(); }
+            });
+        }
+    }
+
     // Escolhe pra que lado o balao abre (acima/abaixo, esquerda/centro/direita)
     // com base em quanto espaco sobra entre o icone e cada borda da tela --
     // assim ele nunca fica cortado, seja no topo (perto do cabecalho) ou nas
@@ -169,16 +231,19 @@
     setInterval(roam, 8000 + Math.random() * 5000);
 
     setTimeout(function () {
+        if (sleepPromptActive) { showSleepPrompt(); return; }
         var lines = LINES[page];
         if (lines && lines.length) say(pick(lines));
     }, 1500);
 
     setInterval(function () {
         if (el.classList.contains("lb-assistant--speaking")) return;
+        if (sleepPromptActive) { showSleepPrompt(); return; }
         if (Math.random() < 0.4) say(pick(IDLE_LINES));
     }, 40000);
 
     iconEl.addEventListener("click", function () {
+        if (sleepPromptActive) { showSleepPrompt(); return; }
         var lines = (LINES[page] && LINES[page].length) ? LINES[page] : IDLE_LINES;
         say(pick(lines));
     });
