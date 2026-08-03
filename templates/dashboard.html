@@ -30,6 +30,14 @@
     <span class="lb-ai-note__tag">Estratégia personalizada · IA</span>
     <p>{{ ai_strategy }}</p>
 </div>
+{% elif is_guest %}
+<div class="lb-ai-note lb-ai-note--muted">
+    <span class="lb-ai-note__tag">Estratégia por IA indisponível no modo teste</span>
+    <p>No modo teste seu plano usa só as regras determinísticas (sem custo, sempre disponíveis) — sem a
+        nota de estratégia gerada por IA nem os simulados de concurso personalizados por tema. Isso é pra
+        manter o teste grátis e sem limite pra qualquer pessoa. <a href="{{ url_for('register') }}">Crie
+        uma conta</a> pra liberar a versão com IA.</p>
+</div>
 {% elif not ai_configured %}
 <div class="lb-ai-note lb-ai-note--muted">
     <span class="lb-ai-note__tag">Estratégia por IA desativada</span>

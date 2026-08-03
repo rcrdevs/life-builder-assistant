@@ -8,7 +8,8 @@
     <p class="lb-lede">Seu dia de desenvolvimento sempre soma 8 horas: o tempo livre que você informar vira
         missões <strong>primárias</strong> (foco dedicado); o restante até completar 8h vira missões
         <strong>secundárias</strong> — mais leves, que podem acontecer em paralelo com sua rotina (trajeto,
-        tarefas domésticas etc). O peso de cada área decide como esse tempo é dividido entre elas.</p>
+        tarefas domésticas etc). O peso de cada área (definido no Passo I) decide como esse tempo é dividido
+        entre elas.</p>
 
     <form method="post" action="{{ url_for('step_info') }}" class="lb-form">
         <label class="lb-field">
@@ -30,45 +31,51 @@
         </label>
 
         {% if 'saude' in user.areas %}
-        <div class="lb-field-row">
-            <label class="lb-field">
-                <span>Peso atual (kg)</span>
-                <input type="number" step="0.1" name="peso_kg" placeholder="Ex: 78" value="{{ user.basic_info.peso_kg or '' }}">
-            </label>
-            <label class="lb-field">
-                <span>Altura (cm)</span>
-                <input type="number" step="0.1" name="altura_cm" placeholder="Ex: 175" value="{{ user.basic_info.altura_cm or '' }}">
-            </label>
-        </div>
-
         <fieldset class="lb-goal-group">
             <legend>Dieta</legend>
             <div class="lb-goal-options">
                 <label class="lb-radio-pill">
-                    <input type="radio" name="dieta" value="sim" {{ 'checked' if user.extra_info.dieta == 'sim' else '' }} required>
+                    <input type="radio" name="dieta" value="sim" id="dieta-sim"
+                           {{ 'checked' if user.extra_info.dieta == 'sim' else '' }} required>
                     <span>Incluir sugestões de dieta no meu plano</span>
                 </label>
                 <label class="lb-radio-pill">
-                    <input type="radio" name="dieta" value="nao" {{ 'checked' if user.extra_info.dieta != 'sim' else '' }} required>
+                    <input type="radio" name="dieta" value="nao" id="dieta-nao"
+                           {{ 'checked' if user.extra_info.dieta != 'sim' else '' }} required>
                     <span>Não, obrigado</span>
                 </label>
             </div>
-            <label class="lb-field" style="margin-top: 14px;">
-                <span>Se sim, qual tipo de dieta?</span>
-                <select name="dieta_tipo">
-                    {% for key, label in diet_type_labels.items() %}
-                    <option value="{{ key }}" {{ 'selected' if user.extra_info.dieta_tipo == key else '' }}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
+
+            <div class="lb-diet-measures{{ '' if user.extra_info.dieta == 'sim' else ' lb-diet-measures--hidden' }}" id="lb-diet-measures">
+                <p class="lb-hint">Pra montar sugestões de dieta com porções coerentes, precisamos do seu peso e altura atuais.</p>
+                <div class="lb-field-row">
+                    <label class="lb-field">
+                        <span>Peso atual (kg)</span>
+                        <input type="number" step="0.1" name="peso_kg" placeholder="Ex: 78" value="{{ user.basic_info.peso_kg or '' }}">
+                    </label>
+                    <label class="lb-field">
+                        <span>Altura (cm)</span>
+                        <input type="number" step="0.1" name="altura_cm" placeholder="Ex: 175" value="{{ user.basic_info.altura_cm or '' }}">
+                    </label>
+                </div>
+                <label class="lb-field">
+                    <span>Qual tipo de dieta?</span>
+                    <select name="dieta_tipo">
+                        {% for key, label in diet_type_labels.items() %}
+                        <option value="{{ key }}" {{ 'selected' if user.extra_info.dieta_tipo == key else '' }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
         </fieldset>
         {% endif %}
 
         <fieldset class="lb-goal-group">
-            <legend>Nível de experiência e peso de cada área</legend>
-            <p class="lb-hint">O peso (1 a 5) decide a fatia do seu tempo diário que vai para cada área — pense
-                nele como o quanto essa área importa para você agora, dentro do conceito de Paideia de
-                desenvolvimento completo.</p>
+            <legend>Nível de experiência de cada área</legend>
+            <p class="lb-hint">O peso de cada área (o quanto ela pesa na divisão do seu tempo diário) já foi
+                definido no Passo I, pela prioridade que você escolheu ali (Principal / Secundária / Plano de
+                fundo). Se quiser mudar isso, <a href="{{ url_for('step_areas') }}">volte pro Passo I</a> —
+                aqui você só ajusta o nível de experiência em cada uma.</p>
             {% for area in user.areas %}
             <div class="lb-area-weight-row">
                 <span class="lb-area-weight-row__label">{{ area_labels.get(area) or user.custom_area_labels.get(area) or area }}</span>
@@ -78,13 +85,10 @@
                     <option value="{{ nk }}" {{ 'selected' if atual_nivel == nk else '' }}>{{ nl }}</option>
                     {% endfor %}
                 </select>
-                <div class="lb-area-weight-row__peso">
-                    <span>Peso</span>
-                    <input type="range" min="1" max="5" step="1"
-                           value="{{ user.pesos.get(area, default_peso) }}"
-                           name="peso_area_{{ area }}" class="lb-volume-slider lb-peso-slider">
-                    <span class="lb-peso-slider-value">{{ user.pesos.get(area, default_peso) }}</span>
-                </div>
+                <span class="lb-area-weight-row__peso-badge lb-area-weight-row__peso-badge--{{ user.extra_info.get('area_tiers', {}).get(area, 'secundario') }}">
+                    {{ area_tier_labels.get(user.extra_info.get('area_tiers', {}).get(area, 'secundario'), 'Secundária') }}
+                    · peso {{ user.pesos.get(area, default_peso) }}
+                </span>
             </div>
             {% endfor %}
         </fieldset>

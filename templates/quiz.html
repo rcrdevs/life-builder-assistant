@@ -12,10 +12,17 @@
 
     {% if not questions %}
     <p class="lb-lede">
+        {% if is_guest %}
+        Simulados com questões geradas por IA pro tema exato que você digitou são um recurso de conta
+        registrada — no modo teste não conseguimos montar questões pra este tema específico. Você pode
+        registrar essa missão manualmente pelo controle de progresso no painel, sem perder os pontos dela,
+        ou <a href="{{ url_for('register') }}">criar uma conta</a> pra liberar os simulados personalizados.
+        {% else %}
         Ainda não conseguimos montar questões para este tema específico — isso acontece se a
         geração por IA não estiver configurada no momento e não houver um banco pronto para ele.
         Você pode registrar essa missão manualmente pelo controle de progresso no painel, sem
         perder os pontos dela.
+        {% endif %}
     </p>
     <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">← Voltar ao painel</a>
     {% else %}
@@ -23,6 +30,10 @@
         {% if source == 'ia' or source == 'cache' %}
         Estas questões foram geradas especificamente para o tema que você digitou — são
         questões-modelo originais, não trechos de uma prova/edital real.
+        {% elif is_guest %}
+        Estas são questões-modelo genéricas, escritas no estilo comum de bancas de concurso — o modo
+        teste não gera questões pelo tema exato que você digitou (isso é reservado pra quem tem conta).
+        Cada uma mostra a fonte/tema ao final.
         {% else %}
         Estas são questões-modelo genéricas, escritas no estilo comum de bancas de concurso — não
         cobrem necessariamente o tema exato que você digitou, pois a geração personalizada não

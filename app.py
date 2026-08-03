@@ -28,6 +28,7 @@ from data import (
 from engine import (
     generate_plan, PLAN_DAYS, compute_mission_points,
     blend_checkpoint_progress, bump_nivel, PROGRESS_POINT_SCALE, DEFAULT_PESO,
+    AREA_TIER_WEIGHTS, AREA_TIER_LABELS,
     TOTAL_DAY_MINUTES, quiz_available, pick_quiz_questions, grade_quiz,
 )
 import ai
@@ -709,9 +710,16 @@ def step_areas():
     goals = dict(user["goals"])
     custom_goal_labels = dict(user["custom_goal_labels"])
 
+    # prioridade escolhida no card de cada area (principal/secundaria/plano
+    # de fundo) -- guardada antes de resolver a chave final do "outro", que
+    # so existe depois do slugify logo abaixo.
+    raw_tiers = {a: request.form.get(f"tier_{a}", "secundario") for a in areas}
+    outro_tier = request.form.get("tier_outro", "secundario")
+
     outro_text = request.form.get("area_outro_text", "").strip()
     if "outro" in areas or outro_text:
         areas = [a for a in areas if a != "outro"]
+        raw_tiers.pop("outro", None)
         if outro_text:
             key = "custom_" + slugify(outro_text)
             base_key, i = key, 2
@@ -722,13 +730,38 @@ def step_areas():
             custom_area_labels[key] = outro_text
             goals[key] = ["principal"]
             custom_goal_labels[f"{key}:principal"] = outro_text
+            raw_tiers[key] = outro_tier
 
     if not areas:
         return render_template("step1_areas.html", areas=AREAS, area_icons=AREA_ICONS, user=user, current_step=1,
                                 erro="Escolha ao menos uma area (ou descreva a sua em 'Outro') para continuar.")
 
+    # so pode existir 1 area "principal" -- se por algum motivo (form
+    # manipulado, corrida entre abas) vier mais de uma, mantem a primeira e
+    # rebaixa as demais pra secundaria, pra nao quebrar o calculo de peso.
+    area_tiers = dict(user["extra_info"].get("area_tiers", {}))
+    seen_principal = False
+    for area in areas:
+        tier = raw_tiers.get(area) or "secundario"
+        if tier not in AREA_TIER_WEIGHTS:
+            tier = "secundario"
+        if tier == "principal":
+            if seen_principal:
+                tier = "secundario"
+            else:
+                seen_principal = True
+        area_tiers[area] = tier
+    area_tiers = {a: t for a, t in area_tiers.items() if a in areas}
+
+    pesos = dict(user["pesos"])
+    for area in areas:
+        pesos[area] = AREA_TIER_WEIGHTS[area_tiers[area]]
+
+    extra_info = dict(user["extra_info"])
+    extra_info["area_tiers"] = area_tiers
+
     save_user_fields(user["id"], nome=nome, areas=areas, custom_area_labels=custom_area_labels,
-                      goals=goals, custom_goal_labels=custom_goal_labels)
+                      goals=goals, custom_goal_labels=custom_goal_labels, pesos=pesos, extra_info=extra_info)
     user = get_user()
     return redirect(next_onboarding_step(user))
 
@@ -754,8 +787,14 @@ def step_paideia():
 
     extra_info = dict(user["extra_info"])
     extra_info["paideia_nivel"] = nivel_fisico
+    area_tiers = dict(extra_info.get("area_tiers", {}))
+    area_tiers.setdefault("saude", "secundario")
+    extra_info["area_tiers"] = area_tiers
 
-    save_user_fields(user["id"], areas=areas, goals=goals, extra_info=extra_info)
+    pesos = dict(user["pesos"])
+    pesos.setdefault("saude", AREA_TIER_WEIGHTS[area_tiers["saude"]])
+
+    save_user_fields(user["id"], areas=areas, goals=goals, extra_info=extra_info, pesos=pesos)
     user = get_user()
     return redirect(next_onboarding_step(user))
 
@@ -822,6 +861,7 @@ def step_info():
         return render_template(
             "step4_info.html", user=user, area_labels=AREAS, nivel_labels=NIVEL_LABELS,
             diet_type_labels=DIET_TYPE_LABELS, default_peso=DEFAULT_PESO,
+            area_tier_labels=AREA_TIER_LABELS,
             total_day_minutes=TOTAL_DAY_MINUTES, current_step=3,
         )
 
@@ -829,12 +869,18 @@ def step_info():
     basic_info["cidade"] = request.form.get("cidade", "").strip()
     basic_info["tempo_livre_min"] = int(request.form.get("tempo_livre_min", 60))
     if "saude" in user["areas"]:
-        peso = request.form.get("peso_kg")
-        altura = request.form.get("altura_cm")
-        basic_info["peso_kg"] = float(peso) if peso else None
-        basic_info["altura_cm"] = float(altura) if altura else None
-
         dieta = request.form.get("dieta", "nao")
+        if dieta == "sim":
+            peso = request.form.get("peso_kg")
+            altura = request.form.get("altura_cm")
+            basic_info["peso_kg"] = float(peso) if peso else None
+            basic_info["altura_cm"] = float(altura) if altura else None
+        else:
+            # sem sugestao de dieta, peso/altura nao sao pedidos -- limpa
+            # qualquer valor antigo pra nao usar dado desatualizado depois.
+            basic_info["peso_kg"] = None
+            basic_info["altura_cm"] = None
+
         extra_info = dict(user["extra_info"])
         extra_info["dieta"] = dieta
         extra_info["dieta_tipo"] = request.form.get("dieta_tipo", "padrao") if dieta == "sim" else None
@@ -844,10 +890,7 @@ def step_info():
     pesos = dict(user["pesos"])
     for area in user["areas"]:
         niveis[area] = request.form.get(f"nivel_{area}", niveis.get(area, "iniciante"))
-        try:
-            pesos[area] = int(request.form.get(f"peso_area_{area}", pesos.get(area, DEFAULT_PESO)))
-        except (TypeError, ValueError):
-            pesos[area] = DEFAULT_PESO
+        pesos.setdefault(area, DEFAULT_PESO)  # fallback p/ areas sem tier definido (ex: paideia)
 
     save_user_fields(user["id"], basic_info=basic_info, niveis=niveis, pesos=pesos)
     user = get_user()
@@ -864,8 +907,10 @@ def step_panorama():
 
     if request.method == "GET":
         panorama_areas = []
+        area_tiers = user["extra_info"].get("area_tiers", {})
         for area in user["areas"]:
             goals_here = user["goals"].get(area) or []
+            tier_label = AREA_TIER_LABELS.get(area_tiers.get(area), "Secundária")
             if not goals_here:
                 panorama_areas.append({
                     "area": area, "area_label": area_label(user, area),
@@ -873,6 +918,7 @@ def step_panorama():
                     "goal_label": "(sem objetivo definido)",
                     "nivel": NIVEL_LABELS.get(user["niveis"].get(area), "-"),
                     "peso": user["pesos"].get(area, DEFAULT_PESO),
+                    "tier_label": tier_label,
                 })
             for goal in goals_here:
                 detalhe = user["goal_details"].get(f"{area}:{goal}")
@@ -885,6 +931,7 @@ def step_panorama():
                     "goal_label": label,
                     "nivel": NIVEL_LABELS.get(user["niveis"].get(area), "-"),
                     "peso": user["pesos"].get(area, DEFAULT_PESO),
+                    "tier_label": tier_label,
                 })
         return render_template("step5_panorama.html", user=user, panorama_areas=panorama_areas,
                                 area_labels=AREAS, diet_type_labels=DIET_TYPE_LABELS, current_step=4)
@@ -918,7 +965,14 @@ def _insert_missions(db, user_id, plan):
 def _update_ai_strategy(user):
     """Gera (se a Groq estiver configurada) uma nota curta de estrategia
     personalizada e salva em extra_info. Falha silenciosamente -- a build
-    funciona 100% sem isso."""
+    funciona 100% sem isso.
+
+    Contas-convidado (modo teste) NUNCA disparam chamada de IA: a chave da
+    Groq/DeepSeek e unica e compartilhada por todo o app (ver ai.py), entao
+    isso e o que evita que trafego anonimo de teste consuma a cota gratuita
+    de quem tem conta de verdade. Ver mensagem equivalente no dashboard."""
+    if session.get("is_guest"):
+        return
     if not ai.ai_available():
         return
     summary = ai.build_profile_summary(user, area_label, area_goals_label)
@@ -1290,7 +1344,10 @@ def _get_or_generate_quiz(mission, user, n):
             return questions[:n], "cache"
 
     topic = _quiz_topic_for(user, mission)
-    questions = ai.generate_quiz_questions(topic, n=n) if ai.quiz_ai_available() else None
+    # mesma regra da nota de estrategia: convidado (modo teste) nunca chama a
+    # IA, so usuarios com conta -- ver _update_ai_strategy() pro motivo.
+    ai_allowed = ai.quiz_ai_available() and not session.get("is_guest")
+    questions = ai.generate_quiz_questions(topic, n=n) if ai_allowed else None
     source = "ia"
     if not questions:
         # fallback: banco estatico generico (so cobre alguns temas fixos, ex.

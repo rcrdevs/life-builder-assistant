@@ -33,7 +33,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const checkbox = document.getElementById(currentTrigger.dataset.checkbox);
         const textInput = document.getElementById(currentTrigger.dataset.textinput);
         const labelEl = document.getElementById(currentTrigger.dataset.label);
-        if (checkbox) checkbox.checked = true;
+        if (checkbox) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+        }
         if (textInput) textInput.value = texto;
         if (labelEl) labelEl.textContent = texto;
         currentTrigger.classList.add("js-outro-trigger--filled");

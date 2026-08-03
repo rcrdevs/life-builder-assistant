@@ -16,23 +16,35 @@
 
         {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
 
-        <div class="lb-area-grid">
+        <p class="lb-hint">A primeira área que você marcar vira seu <strong>objetivo principal</strong>
+            (destaque amarelo) — é nela que o plano concentra mais tempo e atenção. Nas outras você
+            escolhe se ficam como <strong>secundárias</strong> ou só como <strong>plano de fundo</strong>;
+            isso já define o peso de cada uma, sem precisar ajustar nada depois.</p>
+
+        <div class="lb-area-grid" id="lb-area-grid">
             {% for key, label in areas.items() %}
-            <label class="lb-area-card">
-                <input type="checkbox" name="areas" value="{{ key }}" {{ 'checked' if key in user.areas else '' }}>
-                <span class="lb-area-card__icon">{{ area_icons.get(key, '◎') }}</span>
-                <span class="lb-area-card__label">{{ label }}</span>
-            </label>
+            <div class="lb-area-card" data-area-key="{{ key }}">
+                <label class="lb-area-card__hit">
+                    <input type="checkbox" name="areas" value="{{ key }}" {{ 'checked' if key in user.areas else '' }}>
+                    <span class="lb-area-card__icon">{{ area_icons.get(key, '◎') }}</span>
+                    <span class="lb-area-card__label">{{ label }}</span>
+                </label>
+                {% include "_area_tier_picker.html" %}
+            </div>
             {% endfor %}
-            <div class="lb-area-card lb-area-card--outro js-outro-trigger"
-                 data-checkbox="outro-area-checkbox" data-textinput="outro-area-text" data-label="outro-area-label"
-                 tabindex="0" role="button">
-                <input type="checkbox" name="areas" value="outro" id="outro-area-checkbox" class="lb-visually-hidden-input"
-                       {{ 'checked' if user.custom_area_labels else '' }}>
-                <input type="hidden" name="area_outro_text" id="outro-area-text"
-                       value="{{ (user.custom_area_labels.values()|list|first) if user.custom_area_labels else '' }}">
-                <span class="lb-area-card__icon">✦</span>
-                <span class="lb-area-card__label" id="outro-area-label">{{ (user.custom_area_labels.values()|list|first) if user.custom_area_labels else 'Outro' }}</span>
+            <div class="lb-area-card lb-area-card--outro" data-area-key="outro">
+                <div class="js-outro-trigger lb-area-card__hit"
+                     data-checkbox="outro-area-checkbox" data-textinput="outro-area-text" data-label="outro-area-label"
+                     tabindex="0" role="button">
+                    <input type="checkbox" name="areas" value="outro" id="outro-area-checkbox" class="lb-visually-hidden-input"
+                           {{ 'checked' if user.custom_area_labels else '' }}>
+                    <input type="hidden" name="area_outro_text" id="outro-area-text"
+                           value="{{ (user.custom_area_labels.values()|list|first) if user.custom_area_labels else '' }}">
+                    <span class="lb-area-card__icon">✦</span>
+                    <span class="lb-area-card__label" id="outro-area-label">{{ (user.custom_area_labels.values()|list|first) if user.custom_area_labels else 'Outro' }}</span>
+                </div>
+                {% set key = "outro" %}
+                {% include "_area_tier_picker.html" %}
             </div>
         </div>
 
@@ -42,4 +54,5 @@
     </form>
 </section>
 <script src="{{ url_for('static', filename='js/outro.js') }}"></script>
+<script src="{{ url_for('static', filename='js/area_tiers.js') }}"></script>
 {% endblock %}

@@ -21,6 +21,12 @@ PROGRESS_POINT_SCALE = 1.2
 
 DEFAULT_PESO = 3  # peso padrao (1-5) de uma area quando o usuario nao define outro
 
+# peso (1-5) atribuido automaticamente a partir da prioridade escolhida no
+# Passo I (objetivo principal/secundaria/plano de fundo) -- ver step_areas()
+# em app.py. Isso substitui o slider de peso manual do Passo III.
+AREA_TIER_WEIGHTS = {"principal": 5, "secundario": DEFAULT_PESO, "fundo": 1}
+AREA_TIER_LABELS = {"principal": "Principal", "secundario": "Secundária", "fundo": "Plano de fundo"}
+
 # "jornada de trabalho" diaria de autodesenvolvimento: sempre soma 8h entre
 # missoes primarias (tempo livre real do usuario) e secundarias (leves, podem
 # acontecer em paralelo com a rotina -- trajeto, tarefas domesticas etc.)

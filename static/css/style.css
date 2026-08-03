@@ -147,20 +147,74 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 }
 .lb-area-card {
     position: relative;
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-    padding: 24px 14px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 0;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    cursor: pointer;
     transition: border-color .15s ease, box-shadow .15s ease;
 }
 .lb-area-card:hover { border-color: var(--chrome-bright); }
-.lb-area-card input { position: absolute; opacity: 0; }
-.lb-area-card:has(input:checked) { border-color: var(--neon); background: var(--surface-2); box-shadow: 0 0 12px var(--neon-glow); }
+.lb-area-card__hit {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 24px 14px;
+    cursor: pointer;
+}
+.lb-area-card__hit input { position: absolute; opacity: 0; }
+.lb-area-card:has(.lb-area-card__hit input:checked) { border-color: var(--neon); background: var(--surface-2); box-shadow: 0 0 12px var(--neon-glow); }
 .lb-area-card__icon { font-size: 22px; color: var(--chrome-bright); }
-.lb-area-card:has(input:checked) .lb-area-card__icon { color: var(--neon-bright); }
+.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__icon { color: var(--neon-bright); }
 .lb-area-card__label { font-weight: 500; font-size: 13.5px; text-align: center; }
+
+/* ---- prioridade da área (objetivo principal/secundária/plano de fundo) ---- */
+.lb-area-card__tier-tag {
+    position: absolute; top: 8px; right: 8px;
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase;
+    padding: 3px 7px; border-radius: 10px;
+    background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--line);
+    display: none;
+}
+.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__tier-tag { display: inline-block; }
+
+.lb-area-tier-picker {
+    display: none;
+    gap: 6px;
+    padding: 0 14px 16px;
+}
+.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-tier-picker { display: flex; }
+.lb-area-tier-btn {
+    flex: 1;
+    font-family: var(--font-body); font-size: 10.5px; text-align: center;
+    padding: 6px 4px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--line); color: var(--text-dim);
+    cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.lb-area-tier-btn:hover { border-color: var(--chrome-bright); color: var(--text); }
+
+/* estado "secundária" (padrão quando marcado, cor azul já usada pelo card) */
+.lb-area-card:has(.lb-area-tier-input[value="secundario"]) { border-color: var(--neon); }
+.lb-area-tier-btn[data-tier="secundario"].lb-area-tier-btn--active {
+    border-color: var(--neon); color: var(--neon-bright); background: var(--surface-2);
+}
+
+/* estado "plano de fundo" (discreto, cromado) */
+.lb-area-card:has(.lb-area-tier-input[value="fundo"]) { border-color: var(--line); box-shadow: none; background: var(--surface); }
+.lb-area-card:has(.lb-area-tier-input[value="fundo"]) .lb-area-card__icon { color: var(--chrome-bright); }
+.lb-area-tier-btn[data-tier="fundo"].lb-area-tier-btn--active {
+    border-color: var(--chrome-bright); color: var(--chrome-bright); background: var(--surface-2);
+}
+
+/* estado "principal" (destaque amarelo, sinalizado por cor + selo de texto) */
+.lb-area-card:has(.lb-area-tier-input[value="principal"]) {
+    border-color: var(--warn); background: var(--surface-2);
+    box-shadow: 0 0 14px rgba(245, 197, 66, 0.35);
+}
+.lb-area-card:has(.lb-area-tier-input[value="principal"]) .lb-area-card__icon { color: var(--warn); }
+.lb-area-card:has(.lb-area-tier-input[value="principal"]) .lb-area-card__tier-tag {
+    background: rgba(245, 197, 66, 0.16); border-color: var(--warn); color: var(--warn);
+}
+.lb-area-tier-btn[data-tier="principal"].lb-area-tier-btn--active {
+    border-color: var(--warn); color: var(--warn); background: rgba(245, 197, 66, 0.12);
+}
 
 .lb-goal-group { border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin: 0; }
 .lb-goal-group legend { font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--chrome-bright); padding: 0 8px; text-transform: uppercase; }
@@ -622,7 +676,7 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-radio-pill:has(input:checked) .lb-paideia-levels__label { color: var(--neon-bright); }
 .lb-paideia-levels__desc { font-size: 12.5px; color: var(--text-dim); }
 
-/* ---------- PESO POR ÁREA (passo III) ---------- */
+/* ---------- NÍVEL/PRIORIDADE POR ÁREA (passo III) ---------- */
 .lb-area-weight-row {
     display: grid;
     grid-template-columns: 1fr 150px 180px;
@@ -633,8 +687,19 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 }
 .lb-area-weight-row:last-child { border-bottom: none; }
 .lb-area-weight-row__label { font-size: 13.5px; }
-.lb-area-weight-row__peso { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
-.lb-peso-slider-value { color: var(--neon-bright); min-width: 12px; }
+.lb-area-weight-row__peso-badge {
+    justify-self: end;
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .02em;
+    padding: 4px 10px; border-radius: 10px; white-space: nowrap;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text-dim);
+}
+.lb-area-weight-row__peso-badge--principal { border-color: var(--warn); color: var(--warn); background: rgba(245, 197, 66, 0.1); }
+.lb-area-weight-row__peso-badge--secundario { border-color: var(--neon); color: var(--neon-bright); background: rgba(47, 123, 255, 0.08); }
+.lb-area-weight-row__peso-badge--fundo { border-color: var(--chrome); color: var(--chrome-bright); }
+
+/* peso/altura só aparecem quando o usuário pede sugestões de dieta */
+.lb-diet-measures { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.lb-diet-measures--hidden { display: none; }
 
 /* ---------- PANORAMA (revisão final) ---------- */
 .lb-panorama-grid {
@@ -876,6 +941,37 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
     border: 6px solid transparent; border-top-color: var(--neon);
 }
 .lb-assistant--speaking .lb-assistant__bubble { opacity: 1; transform: translate(-50%, 0); }
+
+/* Direção do balão: por padrão ele abre pra cima, centralizado no ícone. Perto
+   das bordas da tela (topo, esquerda, direita) isso corta o balão -- as
+   classes abaixo, calculadas em JS a cada vez que o assistente se move,
+   viram o balão pro lado oposto à borda mais próxima. */
+.lb-assistant--bubble-below .lb-assistant__bubble {
+    bottom: auto; top: 100%; margin-bottom: 0; margin-top: 12px;
+    transform: translate(-50%, -6px);
+}
+.lb-assistant--bubble-below.lb-assistant--speaking .lb-assistant__bubble { transform: translate(-50%, 0); }
+.lb-assistant--bubble-below .lb-assistant__bubble::after {
+    top: auto; bottom: 100%;
+    border-top-color: transparent; border-bottom-color: var(--neon);
+}
+
+.lb-assistant--bubble-start .lb-assistant__bubble {
+    left: 0; transform: translate(0, 6px);
+}
+.lb-assistant--bubble-start.lb-assistant--speaking .lb-assistant__bubble { transform: translate(0, 0); }
+.lb-assistant--bubble-start .lb-assistant__bubble::after { left: 18px; transform: translateX(0); }
+
+.lb-assistant--bubble-end .lb-assistant__bubble {
+    left: auto; right: 0; transform: translate(0, 6px);
+}
+.lb-assistant--bubble-end.lb-assistant--speaking .lb-assistant__bubble { transform: translate(0, 0); }
+.lb-assistant--bubble-end .lb-assistant__bubble::after { left: auto; right: 18px; transform: translateX(0); }
+
+.lb-assistant--bubble-below.lb-assistant--bubble-start .lb-assistant__bubble { transform: translate(0, -6px); }
+.lb-assistant--bubble-below.lb-assistant--bubble-start.lb-assistant--speaking .lb-assistant__bubble { transform: translate(0, 0); }
+.lb-assistant--bubble-below.lb-assistant--bubble-end .lb-assistant__bubble { transform: translate(0, -6px); }
+.lb-assistant--bubble-below.lb-assistant--bubble-end.lb-assistant--speaking .lb-assistant__bubble { transform: translate(0, 0); }
 
 @media (max-width: 640px) {
     .lb-assistant { width: 46px; height: 46px; }

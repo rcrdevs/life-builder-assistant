@@ -12,6 +12,7 @@
         step_areas: [
             "Escolhe as áreas que fazem sentido pra sua fase agora — dá pra ajustar depois.",
             "Não precisa marcar tudo. Foco em poucas áreas costuma render mais que espalhar demais.",
+            "A primeira área marcada vira seu objetivo principal (destaque amarelo) — nas outras, escolhe se ficam secundárias ou só plano de fundo.",
         ],
         step_paideia: [
             "Sem meta física dessa vez? Tudo bem, essa etapa cobre isso de outro jeito.",
@@ -63,11 +64,38 @@
     function say(text) {
         if (!text) return;
         textEl.textContent = text;
+        updateBubbleDirection(lastX, lastY);
         el.classList.add("lb-assistant--speaking");
         clearTimeout(hideTimer);
         hideTimer = setTimeout(function () {
             el.classList.remove("lb-assistant--speaking");
         }, 5400);
+    }
+
+    var bubbleEl = document.getElementById("lb-assistant-bubble");
+    var lastX = window.innerWidth / 2;
+    var lastY = window.innerHeight / 2;
+    var EDGE_SAFE = 10; // respiro minimo entre o balao e a borda da tela
+
+    // Escolhe pra que lado o balao abre (acima/abaixo, esquerda/centro/direita)
+    // com base em quanto espaco sobra entre o icone e cada borda da tela --
+    // assim ele nunca fica cortado, seja no topo (perto do cabecalho) ou nas
+    // laterais (telas estreitas, como um tablet fixado numa bancada).
+    function updateBubbleDirection(x, y) {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var iconHalf = (el.offsetWidth || 60) / 2;
+        var bw = (bubbleEl && bubbleEl.offsetWidth) || (vw <= 640 ? 190 : 240);
+        var bh = (bubbleEl && bubbleEl.offsetHeight) || 80;
+
+        var spaceAbove = y - iconHalf;
+        var spaceBelow = vh - (y + iconHalf);
+        el.classList.toggle("lb-assistant--bubble-below", spaceAbove < bh + 16 && spaceBelow > spaceAbove);
+
+        var overflowsLeft = (x - bw / 2) < EDGE_SAFE;
+        var overflowsRight = (x + bw / 2) > (vw - EDGE_SAFE);
+        el.classList.toggle("lb-assistant--bubble-start", overflowsLeft && !overflowsRight);
+        el.classList.toggle("lb-assistant--bubble-end", overflowsRight && !overflowsLeft);
     }
 
     var MAIN_MAX_WIDTH = 1180; // precisa bater com --lb-main max-width no CSS
@@ -130,6 +158,9 @@
 
         el.style.left = x + "px";
         el.style.top = y + "px";
+        lastX = x;
+        lastY = y;
+        updateBubbleDirection(x, y);
     }
 
     window.addEventListener("resize", roam);

@@ -12,7 +12,7 @@
         <div class="lb-panorama-card">
             <span class="lb-panorama-card__icon">{{ item.icon }}</span>
             <div>
-                <p class="lb-panorama-card__area">{{ item.area_label }} <span class="lb-panorama-card__peso">peso {{ item.peso }}</span></p>
+                <p class="lb-panorama-card__area">{{ item.area_label }} <span class="lb-panorama-card__peso">{{ item.tier_label }} · peso {{ item.peso }}</span></p>
                 <p class="lb-panorama-card__goal">{{ item.goal_label }}</p>
                 <p class="lb-panorama-card__nivel">Nível: {{ item.nivel }}</p>
             </div>
@@ -48,7 +48,10 @@
         </label>
 
         {% if is_guest and not user.onboarding_complete %}
-        <p class="lb-hint">Você está no modo teste — dá pra gerar sua build sem criar conta agora. Se quiser guardar o progresso depois, é só criar uma conta no seu painel.</p>
+        <p class="lb-hint">Você está no modo teste — dá pra gerar sua build sem criar conta agora. O plano em
+            si (missões, pontos, progressão) funciona 100% completo; só a nota de estratégia gerada por IA e
+            os simulados de concurso personalizados por tema ficam de fora nessa versão. Se quiser guardar o
+            progresso ou liberar isso depois, é só criar uma conta no seu painel.</p>
         {% endif %}
 
         <div class="lb-form-actions">

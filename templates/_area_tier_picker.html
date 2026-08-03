@@ -1,0 +1,10 @@
+{# Espera uma variável `key` no escopo (a chave da área). Usada tanto para as
+   áreas fixas quanto para o card "Outro" (nesse caso sempre com key="outro"). #}
+{% set current_tier = user.extra_info.get("area_tiers", {}).get(key, "") %}
+<span class="lb-area-card__tier-tag" data-tier-tag aria-hidden="true"></span>
+<div class="lb-area-tier-picker" data-tier-picker>
+    <input type="hidden" name="tier_{{ key }}" value="{{ current_tier }}" class="lb-area-tier-input" data-tier-input>
+    <button type="button" class="lb-area-tier-btn" data-tier="principal">Principal</button>
+    <button type="button" class="lb-area-tier-btn" data-tier="secundario">Secundária</button>
+    <button type="button" class="lb-area-tier-btn" data-tier="fundo">Plano de fundo</button>
+</div>

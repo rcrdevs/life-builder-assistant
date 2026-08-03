@@ -61,16 +61,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // sliders de peso por area (passo III): atualizam o numero ao lado
-    document.querySelectorAll(".lb-area-weight-row__peso").forEach((row) => {
-        const slider = row.querySelector(".lb-peso-slider");
-        const valueLabel = row.querySelector(".lb-peso-slider-value");
-        if (slider && valueLabel) {
-            slider.addEventListener("input", () => {
-                valueLabel.textContent = slider.value;
+    // peso/altura (passo III): só fazem sentido se o usuário pediu sugestões
+    // de dieta -- mostra/esconde o bloco conforme o radio "dieta" muda.
+    const dietMeasures = document.getElementById("lb-diet-measures");
+    if (dietMeasures) {
+        const dietRadios = document.querySelectorAll('input[name="dieta"]');
+        dietRadios.forEach((radio) => {
+            radio.addEventListener("change", () => {
+                const checked = document.querySelector('input[name="dieta"]:checked');
+                dietMeasures.classList.toggle("lb-diet-measures--hidden", !checked || checked.value !== "sim");
             });
-        }
-    });
+        });
+    }
 
     // filtro de missoes de hoje: controle segmentado de tier (selecao unica,
     // "Todas" e o padrao) cruzado com o dropdown de areas (selecao multipla,
