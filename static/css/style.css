@@ -660,7 +660,12 @@ input:focus, select:focus, textarea:focus, button:focus {
     display: flex; align-items: center; justify-content: center;
     background: var(--surface-2); color: var(--chrome); font-size: 11px;
 }
+.lb-rec-video__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lb-rec-video__title { line-height: 1.35; min-width: 0; }
+.lb-rec-video__note {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    line-height: 1.3; overflow-wrap: anywhere;
+}
 
 .lb-rec-evento {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -669,7 +674,12 @@ input:focus, select:focus, textarea:focus, button:focus {
     transition: border-color .15s ease, background .15s ease;
 }
 .lb-rec-evento:hover { border-color: var(--neon); background: var(--surface-2); }
+.lb-rec-evento__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lb-rec-evento__desc { font-size: 12px; line-height: 1.35; color: var(--text); min-width: 0; }
+.lb-rec-evento__note {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    line-height: 1.3; overflow-wrap: anywhere;
+}
 .lb-rec-evento__arrow { color: var(--neon-bright); flex-shrink: 0; }
 
 .lb-toast {
@@ -1130,6 +1140,36 @@ input:focus, select:focus, textarea:focus, button:focus {
     .lb-assistant__bubble { max-width: 190px; font-size: 12px; }
 }
 
+/* --- Modo "palco": o Con para de circular, vai pro centro e cresce -------
+   Usado na tela de geração da build (ver enterStage() em assistant.js e
+   templates/step_build.html). Vem depois das regras base do assistente de
+   propósito: precisa vencer o `transition` lento (3.2s) do modo circulante,
+   senão o crescimento fica arrastado. O JS limpa o left/top inline que o
+   roam() aplica antes de ligar esta classe. */
+/* seletor duplicado (.lb-assistant.lb-assistant--stage) de proposito: sobe a
+   especificidade acima da regra base e da versao dela dentro do @media
+   mobile, entao o modo palco vence independente da ordem no arquivo. */
+.lb-assistant.lb-assistant--stage {
+    left: 50%;
+    top: 152px;
+    width: 132px; height: 132px;
+    transition: left .7s cubic-bezier(.2, .8, .2, 1), top .7s cubic-bezier(.2, .8, .2, 1),
+                width .7s cubic-bezier(.2, .8, .2, 1), height .7s cubic-bezier(.2, .8, .2, 1);
+}
+.lb-assistant--stage .lb-assistant__icon { cursor: default; }
+.lb-assistant--stage .lb-assistant__bubble { display: none; }
+.lb-assistant--stage .lb-assistant__ring--outer {
+    stroke: var(--neon-bright);
+    filter: drop-shadow(0 0 8px var(--neon-glow));
+}
+.lb-assistant--stage .lb-assistant__core { opacity: 1; filter: drop-shadow(0 0 6px var(--neon-bright)); }
+@media (max-width: 640px) {
+    .lb-assistant.lb-assistant--stage { top: 124px; width: 104px; height: 104px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lb-assistant.lb-assistant--stage { transition: none; }
+}
+
 /* --- Tela de loading da geração de build (assistente ampliado) --- */
 .lb-assistant--hidden { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
 
@@ -1208,43 +1248,71 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-pratica-fisica__legend { font-size: 12.5px; color: var(--text-dim); margin: 0; }
 
 /* --- Tela do Con: dialogo antes de gerar a build --- */
+/* --- Tela do Con: o assistente flutuante cresce e vira o palco ---------
+   Nao ha figura propria aqui: .lb-assistant--stage (abaixo, junto das regras
+   do assistente) tira o Con do modo "circulando pela tela" e o leva pro
+   centro, grande. A tela so cuida do painel de dialogo abaixo dele. */
 .lb-con-stage {
-    display: flex; flex-direction: column; align-items: center; gap: 26px;
-    text-align: center; padding-top: 24px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+    padding-top: 156px;   /* espaco pro Con ampliado, que e position:fixed */
 }
-.lb-con-figure { width: 128px; height: 128px; }
-.lb-con-figure svg { width: 100%; height: 100%; overflow: visible; }
-.lb-con-figure__ring { fill: none; }
-.lb-con-figure__ring--outer {
-    stroke: var(--neon-bright); stroke-width: 1.6;
-    filter: drop-shadow(0 0 6px var(--neon-glow));
-    transform-box: fill-box; transform-origin: center;
-    animation: lb-assistant-spin 10s linear infinite;
-}
-.lb-con-figure__inner-spin {
-    transform-box: fill-box; transform-origin: center;
-    animation: lb-assistant-spin-rev 5.5s linear infinite;
-}
-.lb-con-figure__ring--inner { stroke: var(--neon-bright); stroke-width: 2; opacity: 0.9; }
-.lb-con-figure__core { fill: var(--neon-bright); filter: drop-shadow(0 0 5px var(--neon-bright)); }
 
 .lb-con-dialogue {
-    max-width: 440px; width: 100%;
-    background: var(--surface); border: 1px solid var(--neon);
-    border-radius: var(--radius); padding: 22px 26px;
-    box-shadow: 0 0 20px var(--neon-glow);
-    display: flex; flex-direction: column; gap: 14px;
+    max-width: 480px; width: 100%;
+    background: var(--surface); border: 1px solid var(--line);
+    border-top: 2px solid var(--neon);
+    border-radius: var(--radius); padding: 24px 26px 26px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+    display: flex; flex-direction: column; gap: 12px;
 }
 .lb-con-dialogue__progress {
-    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--neon-bright); margin: 0;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-dim); margin: 0;
 }
-.lb-con-dialogue__text { font-size: 15.5px; line-height: 1.5; margin: 0; color: var(--text); }
-.lb-con-dialogue__choices { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-.lb-con-dialogue__input-row { display: flex; gap: 8px; }
-.lb-con-dialogue__input {
-    flex: 1; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
-    padding: 10px 12px; border-radius: var(--radius); font-family: var(--font-body); font-size: 14px;
+.lb-con-dialogue__text {
+    font-size: 17px; line-height: 1.45; margin: 0; color: var(--text); text-wrap: balance;
+}
+.lb-con-dialogue__context {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--neon-bright); margin: -4px 0 0;
+}
+
+/* opcoes de direcionamento / sugestoes de tema */
+.lb-con-options { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+.lb-con-chip {
+    font-family: var(--font-body); font-size: 13px;
+    padding: 9px 15px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.lb-con-chip:hover { border-color: var(--neon); color: var(--neon-bright); }
+.lb-con-chip--on {
+    border-color: var(--neon); color: var(--neon-bright); background: var(--neon-base);
+    box-shadow: 0 0 8px var(--neon-glow);
+}
+
+.lb-con-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px;
+}
+/* dentro do dialogo os botoes ocupam a largura que precisam, centrados --
+   sem isso o .lb-btn base (align-self: flex-start) desalinhava a fileira. */
+.lb-con-actions .lb-btn { align-self: auto; }
+
+.lb-con-write { display: flex; gap: 8px; margin-top: 6px; }
+.lb-con-write__input {
+    flex: 1; min-width: 0;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    padding: 11px 13px; border-radius: var(--radius); font-family: var(--font-body); font-size: 14px;
+}
+.lb-con-write .lb-btn { align-self: auto; flex-shrink: 0; }
+.lb-con-form { display: none; }
+
+@media (max-width: 640px) {
+    .lb-con-stage { padding-top: 128px; }
+    .lb-con-dialogue { padding: 20px; }
+    .lb-con-dialogue__text { font-size: 15.5px; }
 }
 
 /* --- Pergunta interativa do assistente (dentro da bolha) --- */

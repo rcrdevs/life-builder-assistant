@@ -81,11 +81,46 @@ def livro(titulo, autor, link=None, preco_nota="Ver preço atual na loja"):
 
 
 def video_busca(titulo_busca):
+    """Fallback: busca no YouTube. Usado só quando não há um canal curado que
+    cubra bem o tema -- link direto (ver `canal`) é sempre preferível."""
     return {"titulo": titulo_busca, "url": youtube_search_link(titulo_busca), "thumbnail": None}
 
 
+def canal(handle, nome, foco):
+    """Canal do YouTube real, verificado um a um (a existência de cada @handle
+    foi conferida carregando a página do canal). Link DIRETO para o canal, em
+    vez de jogar o usuário numa busca genérica.
+
+    Por que canal e não vídeo específico: IDs de vídeo do YouTube são strings
+    aleatórias de 11 caracteres, impossíveis de verificar em lote neste
+    ambiente (a busca do YouTube é renderizada em JS e não é acessível aqui) --
+    chutar um ID levaria o usuário a um vídeo errado ou removido, o que é pior
+    que uma busca. Canal é estável, verificável e continua sendo link direto.
+    """
+    return {
+        "titulo": nome, "url": f"https://www.youtube.com/@{handle}",
+        "thumbnail": None, "tipo": "canal", "nota": foco,
+    }
+
+
+def meetup_link(query):
+    """Busca de grupos/eventos reais no Meetup (verificado ao vivo: a página
+    /pt-BR/find/ lista eventos de verdade e aceita o termo na URL)."""
+    return f"https://www.meetup.com/pt-BR/find/?keywords={_urlquote(query)}"
+
+
 def evento(desc, busca):
+    """Fallback: busca de eventos. Preferir `destino` sempre que houver uma
+    página real e estável para o tema."""
     return {"desc": desc, "link": sympla_search_link(busca)}
+
+
+def destino(desc, url, nota=None):
+    """Destino real e estável para encontrar eventos/comunidades do tema --
+    uma página que existe hoje e continua existindo (calendário de provas,
+    portal de concursos, busca de grupos locais), em vez de um link para um
+    evento datado específico, que morreria em semanas."""
+    return {"desc": desc, "link": url, "nota": nota}
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +207,67 @@ GOALS_NEEDING_DETAIL = {
         "fallback": "a prova",
     },
 }
+
+# ---------------------------------------------------------------------------
+# DIRECIONAMENTO POR OBJETIVO — perguntas de múltipla escolha que o Con faz
+# antes de gerar a build (ver step_build() em app.py).
+#
+# Complementam GOALS_NEEDING_DETAIL: objetivos que já pedem um texto livre
+# (qual concurso, qual idioma) NÃO aparecem aqui, porque esse texto já É o
+# direcionamento deles. Todo o resto ganha uma pergunta de direção — antes
+# disso, quem escolhia Espiritualidade ou Saúde passava batido pela tela do
+# Con sem nenhuma pergunta.
+#
+# O direcionamento não exclui os outros campos: ele dá ênfase ao que foi
+# escolhido (fica salvo em extra_info["goal_directions"] e entra no resumo
+# que alimenta a nota de estratégia por IA). "Livre" é sempre a última opção,
+# para quem prefere manter o objetivo abrangente.
+# ---------------------------------------------------------------------------
+DIRECTION_FREE_LABEL = "Livre (sem direcionamento específico)"
+
+GOAL_DIRECTIONS = {
+    ("profissional", "promocao"): {
+        "prompt": "Que caminho de carreira você quer que eu priorize?",
+        "options": ["Liderança de time", "Especialista técnico", "Gestão de produto/projeto", "Comercial e vendas"],
+    },
+    ("saude", "perder_peso"): {
+        "prompt": "Que abordagem combina mais com você?",
+        "options": ["Musculação com déficit calórico", "Corrida e cardio", "Treino funcional / HIIT", "Caminhada e hábitos leves"],
+    },
+    ("saude", "ganhar_massa"): {
+        "prompt": "Que estilo de treino você prefere?",
+        "options": ["Musculação clássica", "Calistenia (peso do corpo)", "Powerlifting / força pura", "Treino em casa, sem equipamento"],
+    },
+    ("saude", "manter_forma"): {
+        "prompt": "Como você prefere se manter ativo?",
+        "options": ["Musculação leve", "Corrida e caminhada", "Yoga / pilates", "Esporte coletivo"],
+    },
+    ("saude", "paideia_basico"): {
+        "prompt": "Que tipo de prática física combina mais com você?",
+        "options": ["Alongamento e mobilidade", "Caminhada ao ar livre", "Yoga / respiração", "Exercícios de postura"],
+    },
+    ("saude", "paideia_moderado"): {
+        "prompt": "Que tipo de treino combina mais com você?",
+        "options": ["Funcional / circuito", "Musculação", "Corrida e cardio", "Esporte ou arte marcial"],
+    },
+    ("saude", "paideia_avancado"): {
+        "prompt": "Onde você quer concentrar o treino?",
+        "options": ["Hipertrofia", "Força pura", "Condicionamento / resistência", "Calistenia avançada"],
+    },
+    ("espiritualidade", "meditacao"): {
+        "prompt": "Existe alguma tradição que você quer seguir?",
+        "options": ["Mindfulness (laico)", "Budismo / Zen", "Contemplação cristã", "Yoga e tradição védica", "Ocultismo e hermetismo"],
+    },
+    ("espiritualidade", "proposito"): {
+        "prompt": "Qual linha de pensamento faz mais sentido pra você?",
+        "options": ["Filosofia estoica", "Cristianismo", "Judaísmo", "Ocultismo e hermetismo", "Budismo", "Psicologia junguiana"],
+    },
+    ("espiritualidade", "gratidao"): {
+        "prompt": "Como você prefere praticar?",
+        "options": ["Prática laica (diário e reflexão)", "Oração cristã", "Tradição judaica", "Prática budista", "Ritual e simbolismo"],
+    },
+}
+
 
 ROTINA_MISSIONS = [
     {"desc": "Beber pelo menos 2 litros de água ao longo do dia", "stat": "resistencia", "points": 1, "period": "manha"},
@@ -359,109 +455,133 @@ QUIZ_BANK = {
     ],
 }
 
+# Canais do YouTube usados abaixo -- cada @handle foi verificado carregando a
+# página do canal (os que não existiam foram descartados). Centralizados aqui
+# para ficar óbvio o que já foi conferido e para reaproveitar entre objetivos.
+CANAL_CONCURSOS = ("EstrategiaConcursosOficial", "Estratégia Concursos", "aulas e resolução de questões de concurso")
+CANAL_PORTUGUES = ("ProfessorNoslen", "Professor Noslen", "português para prova, do zero ao avançado")
+CANAL_VESTIBULAR = ("Descomplica", "Descomplica", "aulas de ENEM e vestibular")
+CANAL_INGLES = ("SmallAdvantages", "Small Advantages", "inglês na prática, por um gringo no Brasil")
+CANAL_TREINO = ("LeandroTwin", "Leandro Twin", "treino e hipertrofia com base científica")
+CANAL_NUTRI = ("RenatoCariani", "Renato Cariani", "treino e nutrição aplicada")
+CANAL_CORRIDA = ("corridaperfeita", "Corrida Perfeita", "técnica, treino e prevenção de lesão na corrida")
+CANAL_FILOSOFIA = ("CasaDoSaber", "Casa do Saber", "filosofia, propósito e pensamento crítico")
+CANAL_MEDITACAO = ("monjacoen", "Monja Coen", "prática de meditação e budismo zen")
+
+# Destinos reais para "onde encontrar" -- páginas estáveis (portal de
+# concursos, calendário de provas, busca de grupos locais), verificadas ao
+# vivo. Ver `destino` para o porquê de não linkar um evento datado específico.
+PCI_CONCURSOS = "https://www.pciconcursos.com.br/concursos/"
+TICKET_SPORTS = "https://www.ticketsports.com.br/calendario"
+TOASTMASTERS = "https://www.toastmasters.org/find-a-club"
+
 RECOMMENDATIONS = {
     ("profissional", "concurso"): {
         "livros": [
             livro("Como se Preparar para Concursos Públicos com Alto Rendimento", "Rogério Neiva",
                   link="https://www.amazon.com.br/Como-Preparar-Concursos-P%C3%BAblicos-Rendimento/dp/8530932935"),
-            livro("Português Descomplicado", "William Douglas e Renato Aquino",
-                  link=amazon_link("Português Descomplicado William Douglas Renato Aquino")),
+            livro("Aprendendo a Aprender", "Barbara Oakley"),
         ],
-        "conteudo": [video_busca("Resolução comentada de provas de concurso público"),
-                     video_busca("Como estudar legislação seca para concurso")],
-        "evento": evento("Simulado presencial de concurso ou grupo de estudos", "simulado concurso público"),
+        "conteudo": [canal(*CANAL_CONCURSOS), canal(*CANAL_PORTUGUES)],
+        "evento": destino("Editais abertos agora no PCI Concursos", PCI_CONCURSOS,
+                          "vagas, salários e prazos atualizados diariamente"),
     },
     ("profissional", "vaga"): {
         "livros": [livro("Never Split the Difference", "Chris Voss"),
-                   livro("Não Se Apega, Não", "Petter Pergola")],
-        "conteudo": [video_busca("Como se preparar para entrevista de emprego método STAR"),
-                     video_busca("Mock interview entrevista de emprego")],
-        "evento": evento("Meetup de recrutamento ou feira de carreiras", "feira de carreiras tech"),
+                   livro("Designing Your Life", "Bill Burnett e Dave Evans")],
+        "conteudo": [canal(*CANAL_FILOSOFIA), video_busca("simulação de entrevista de emprego método STAR")],
+        "evento": destino("Encontros e meetups da sua área", meetup_link("carreira"),
+                          "grupos locais reais, filtrados pela sua cidade"),
     },
     ("profissional", "promocao"): {
         "livros": [livro("Radical Candor", "Kim Scott"),
-                   livro("The First 90 Days", "Michael Watkins")],
-        "conteudo": [video_busca("Como pedir promoção no trabalho"),
-                     video_busca("Liderança e gestão de equipes")],
-        "evento": evento("Workshop de liderança", "workshop liderança"),
+                   livro("Os 7 Hábitos das Pessoas Altamente Eficazes", "Stephen Covey")],
+        "conteudo": [canal(*CANAL_FILOSOFIA), video_busca("como pedir promoção e negociar salário")],
+        "evento": destino("Clube de oratória e liderança perto de você", TOASTMASTERS,
+                          "Toastmasters — presencial ou online"),
     },
     ("estudos", "idioma"): {
-        "livros": [livro("Fluent Forever", "Gabriel Wyner")],
-        "conteudo": [video_busca("Como aprender um idioma sozinho método eficiente"),
-                     video_busca("Podcast para praticar listening idioma")],
-        "evento": evento("Encontro de conversação (language exchange)", "language exchange encontro"),
+        "livros": [livro("Fluente para Sempre", "Gabriel Wyner")],
+        "conteudo": [canal(*CANAL_INGLES)],
+        "evento": destino("Grupos de conversação (language exchange)", meetup_link("idiomas"),
+                          "encontros reais de troca de idioma na sua região"),
     },
     ("estudos", "bolsa"): {
-        "livros": [livro("Redação Nota 1000 no ENEM", "Adriana Andrade e Thiago Guilherme")],
-        "conteudo": [video_busca("Como escrever carta de motivação para bolsa de estudos"),
-                     video_busca("Aulas gratuitas Khan Academy vestibular")],
-        "evento": evento("Feira de universidades ou orientação vocacional", "feira de universidades"),
+        "livros": [livro("Aprendendo a Aprender", "Barbara Oakley"),
+                   livro("A Arte de Escrever Bem", "Dad Squarisi")],
+        "conteudo": [canal(*CANAL_VESTIBULAR), canal(*CANAL_PORTUGUES)],
+        "evento": destino("Grupos de estudo e preparação perto de você", meetup_link("estudos"),
+                          "encontros de estudo em grupo"),
     },
     ("estudos", "intercambio"): {
-        "livros": [livro("Guia do Intercâmbio", "Estudar Fora")],
-        "conteudo": [video_busca("Relato real de intercâmbio dicas"),
-                     video_busca("Como conseguir visto de estudante")],
-        "evento": evento("Feira de intercâmbio", "feira de intercâmbio"),
+        "livros": [livro("Fluente para Sempre", "Gabriel Wyner")],
+        "conteudo": [canal(*CANAL_INGLES), video_busca("como conseguir visto de estudante passo a passo")],
+        "evento": destino("Comunidades de intercambistas e expatriados", meetup_link("intercâmbio"),
+                          "quem já foi, e quem está indo"),
     },
     ("saude", "perder_peso"): {
-        "livros": [livro("Emagreça Comendo", "Sophie Deram")],
-        "conteudo": [video_busca("Treino HIIT para iniciantes em casa"),
-                     video_busca("Como funciona déficit calórico explicação")],
-        "evento": evento("Corrida de rua 5km ou grupo de caminhada", "corrida de rua 5km"),
+        "livros": [livro("O Peso das Dietas", "Sophie Deram")],
+        "conteudo": [canal(*CANAL_TREINO), canal(*CANAL_NUTRI)],
+        "evento": destino("Calendário de corridas de rua", TICKET_SPORTS,
+                          "provas de 5km em diante, por cidade e data"),
     },
     ("saude", "ganhar_massa"): {
-        "livros": [livro("Treinamento de Força para Todos", "Vitor Sorrentino")],
-        "conteudo": [video_busca("Treino de hipertrofia natural para iniciantes"),
-                     video_busca("Quanto de proteína comer por dia hipertrofia")],
-        "evento": evento("Campeonato local de levantamento de peso amador", "campeonato levantamento de peso amador"),
+        "livros": [livro("Bigger Leaner Stronger", "Michael Matthews")],
+        "conteudo": [canal(*CANAL_TREINO), canal(*CANAL_NUTRI)],
+        "evento": destino("Grupos de treino e comunidades fitness", meetup_link("treino"),
+                          "quem treina junto perto de você"),
     },
     ("saude", "maratona"): {
-        "livros": [livro("Nascidos para Correr", "Christopher McDougall")],
-        "conteudo": [video_busca("Plano de treino para primeira maratona iniciante"),
-                     video_busca("Como evitar lesões correndo")],
-        "evento": evento("Prova de rua de 10km ou meia-maratona", "prova de rua 10km meia maratona"),
+        "livros": [livro("Nascidos para Correr", "Christopher McDougall"),
+                   livro("Do Que Eu Falo Quando Eu Falo de Corrida", "Haruki Murakami")],
+        "conteudo": [canal(*CANAL_CORRIDA)],
+        "evento": destino("Calendário de provas de rua e maratonas", TICKET_SPORTS,
+                          "inscrições abertas, por cidade e distância"),
     },
     ("saude", "manter_forma"): {
         "livros": [livro("Como Não Morrer", "Michael Greger")],
-        "conteudo": [video_busca("Aula de yoga para iniciantes completa"),
-                     video_busca("Mobilidade e alongamento diário")],
-        "evento": evento("Corrida de rua leve ou aula experimental", "aula experimental yoga pilates"),
+        "conteudo": [canal(*CANAL_TREINO), video_busca("aula de yoga completa para iniciantes")],
+        "evento": destino("Grupos de caminhada, corrida e yoga", meetup_link("saúde e bem-estar"),
+                          "atividades em grupo perto de você"),
     },
     ("saude", "paideia_basico"): {
         "livros": [livro("A Paideia", "Werner Jaeger")],
-        "conteudo": [video_busca("Mobilidade e alongamento para iniciantes"),
-                     video_busca("Postura correta no dia a dia")],
-        "evento": evento("Aula experimental de yoga, pilates ou alongamento", "aula experimental yoga pilates alongamento"),
+        "conteudo": [video_busca("mobilidade e alongamento para iniciantes"),
+                     video_busca("exercícios de postura no dia a dia")],
+        "evento": destino("Grupos de yoga, alongamento e caminhada", meetup_link("yoga"),
+                          "aulas e encontros abertos"),
     },
     ("saude", "paideia_moderado"): {
-        "livros": [livro("Corpo e Alma", "George Leonard")],
-        "conteudo": [video_busca("Treino funcional para nível intermediário"),
-                     video_busca("Circuito funcional corpo inteiro em casa")],
-        "evento": evento("Aula experimental de crossfit ou funcional", "aula experimental crossfit funcional"),
+        "livros": [livro("Maestria", "George Leonard")],
+        "conteudo": [canal(*CANAL_TREINO)],
+        "evento": destino("Grupos de treino funcional e esporte", meetup_link("treino funcional"),
+                          "turmas e encontros perto de você"),
     },
     ("saude", "paideia_avancado"): {
-        "livros": [livro("Treinamento de Força para Todos", "Vitor Sorrentino")],
-        "conteudo": [video_busca("Treino de hipertrofia natural para iniciantes"),
-                     video_busca("Técnica correta agachamento e supino")],
-        "evento": evento("Campeonato local de levantamento de peso amador", "campeonato levantamento de peso amador"),
+        "livros": [livro("Bigger Leaner Stronger", "Michael Matthews")],
+        "conteudo": [canal(*CANAL_TREINO), canal(*CANAL_NUTRI)],
+        "evento": destino("Grupos de treino e comunidades fitness", meetup_link("musculação"),
+                          "quem treina junto perto de você"),
     },
     ("espiritualidade", "meditacao"): {
-        "livros": [livro("A Arte da Meditação", "Matthieu Ricard")],
-        "conteudo": [video_busca("Meditação guiada iniciantes 10 minutos"),
-                     video_busca("Como manter constância na meditação")],
-        "evento": evento("Retiro de meditação de um dia", "retiro de meditação"),
+        "livros": [livro("A Arte da Meditação", "Matthieu Ricard"),
+                   livro("Atenção Plena: Mindfulness", "Mark Williams e Danny Penman")],
+        "conteudo": [canal(*CANAL_MEDITACAO)],
+        "evento": destino("Grupos e retiros de meditação", meetup_link("meditação"),
+                          "encontros presenciais e online"),
     },
     ("espiritualidade", "proposito"): {
-        "livros": [livro("Em Busca de Sentido", "Viktor Frankl")],
-        "conteudo": [video_busca("Filosofia estoica aplicada ao dia a dia"),
-                     video_busca("Como encontrar propósito de vida")],
-        "evento": evento("Círculo de discussão filosófica", "círculo de discussão filosófica"),
+        "livros": [livro("Em Busca de Sentido", "Viktor Frankl"),
+                   livro("Meditações", "Marco Aurélio")],
+        "conteudo": [canal(*CANAL_FILOSOFIA)],
+        "evento": destino("Círculos de filosofia e discussão", meetup_link("filosofia"),
+                          "grupos de leitura e debate"),
     },
     ("espiritualidade", "gratidao"): {
-        "livros": [livro("O Poder da Gratidão", "Deepak Chopra")],
-        "conteudo": [video_busca("Como praticar gratidão diariamente"),
-                     video_busca("Diário de gratidão benefícios")],
-        "evento": evento("Roda de conversa e reflexão semanal", "roda de conversa reflexão"),
+        "livros": [livro("Gratidão", "Oliver Sacks")],
+        "conteudo": [canal(*CANAL_MEDITACAO), canal(*CANAL_FILOSOFIA)],
+        "evento": destino("Rodas de conversa e grupos de apoio", meetup_link("bem-estar"),
+                          "encontros de reflexão perto de você"),
     },
 }
 
@@ -508,6 +628,71 @@ def generic_recommendation(label):
         "conteudo": [video_busca(f"{label} para iniciantes"), video_busca(f"como aprender {label}")],
         "evento": evento(f"evento ou encontro local relacionado a {label}", label),
     }
+
+
+# ---------------------------------------------------------------------------
+# SUGESTÕES DE TEMA — a última pergunta do Con antes de gerar a build ("quer
+# acrescentar mais alguma coisa?"). As sugestões são DETERMINÍSTICAS: saem de
+# regras sobre o que o usuário escolheu, não de um prompt de IA. Isso segue o
+# mesmo princípio do resto do motor -- a IA complementa o sistema, não decide
+# por ele -- e garante que funcionem também no modo teste (onde a IA não roda).
+#
+# Cada regra é (condição, sugestão). A condição recebe o conjunto de áreas e
+# o conjunto de pares (área, objetivo) escolhidos.
+# ---------------------------------------------------------------------------
+def _has_goal(pairs, area, goal):
+    return (area, goal) in pairs
+
+
+THEME_SUGGESTION_RULES = [
+    (lambda areas, pairs: _has_goal(pairs, "profissional", "concurso") or _has_goal(pairs, "estudos", "bolsa"),
+     "Controlar a ansiedade nos dias de prova"),
+    (lambda areas, pairs: "estudos" in areas or _has_goal(pairs, "profissional", "concurso"),
+     "Uma rotina de sono que sustente os estudos"),
+    (lambda areas, pairs: "profissional" in areas and "saude" in areas,
+     "Treinar mesmo nos dias de trabalho puxado"),
+    (lambda areas, pairs: "espiritualidade" not in areas,
+     "Reservar um momento de silêncio no meio do dia"),
+    (lambda areas, pairs: "saude" not in areas,
+     "Cuidar do corpo sem precisar de academia"),
+    (lambda areas, pairs: _has_goal(pairs, "profissional", "vaga") or _has_goal(pairs, "profissional", "promocao"),
+     "Construir uma rede de contatos na sua área"),
+    (lambda areas, pairs: "estudos" in areas and "espiritualidade" in areas,
+     "Estudar com mais concentração e menos dispersão"),
+    # específicas por área -- garantem que quem escolheu poucas áreas ainda
+    # veja sugestões ligadas ao que pediu, e não só a genérica de equilíbrio.
+    (lambda areas, pairs: "espiritualidade" in areas,
+     "Aprofundar a leitura sobre o caminho que escolhi"),
+    (lambda areas, pairs: "saude" in areas,
+     "Ajustar a alimentação junto com o treino"),
+    (lambda areas, pairs: "profissional" in areas,
+     "Proteger um bloco de foco no meio do expediente"),
+    (lambda areas, pairs: "estudos" in areas,
+     "Revisar o que aprendi em vez de só avançar"),
+    (lambda areas, pairs: len(areas) <= 2,
+     "Equilibrar melhor as áreas que ficaram de fora"),
+    # rede de segurança: cabe em qualquer build, então a última pergunta
+    # nunca aparece com uma sugestão só.
+    (lambda areas, pairs: True,
+     "Registrar como me sinto no fim do dia"),
+]
+
+MAX_THEME_SUGGESTIONS = 3
+
+
+def suggest_extra_themes(area_goal_pairs):
+    """Sugestões de tema condizentes com o que o usuário escolheu, para a
+    última pergunta do Con. Retorna no máximo MAX_THEME_SUGGESTIONS itens,
+    sem repetir, na ordem das regras (as mais específicas vêm primeiro)."""
+    pairs = set(area_goal_pairs)
+    areas = {a for a, _ in pairs}
+    sugestoes = []
+    for condicao, texto in THEME_SUGGESTION_RULES:
+        if len(sugestoes) >= MAX_THEME_SUGGESTIONS:
+            break
+        if texto not in sugestoes and condicao(areas, pairs):
+            sugestoes.append(texto)
+    return sugestoes
 
 # ---------------------------------------------------------------------------
 # DIETA — refeições com porções e macros aproximados, por tipo de dieta.

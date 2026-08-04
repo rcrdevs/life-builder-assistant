@@ -1,36 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Life Builder — Preparando sua build{% endblock %}
 {% block content %}
-<section class="lb-onboard lb-con-stage" id="lb-con-stage">
-    <div class="lb-con-figure" aria-hidden="true">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <polygon class="lb-con-figure__ring lb-con-figure__ring--outer" points="50,4 92,27 92,73 50,96 8,73 8,27"/>
-            <g class="lb-con-figure__inner-spin">
-                <polygon class="lb-con-figure__ring lb-con-figure__ring--inner" points="50,30 68,40 68,60 50,70 32,60 32,40"/>
-                <circle class="lb-con-figure__core" cx="50" cy="50" r="4"/>
-            </g>
-        </svg>
-    </div>
-
+{# Sem figura propria aqui de proposito: quem "cresce" e vira o palco e o
+   proprio assistente flutuante (ver _assistant.html + enterStage() em
+   assistant.js). Antes esta tela desenhava um segundo hexagono, e o Con
+   aparecia duplicado. #}
+<section class="lb-con-stage" id="lb-con-stage">
     <div class="lb-con-dialogue" id="lb-con-dialogue">
         <p class="lb-con-dialogue__progress" id="lb-con-progress" hidden></p>
         <p class="lb-con-dialogue__text" id="lb-con-question">Só um instante — o Con está preparando sua build...</p>
+        <p class="lb-con-dialogue__context" id="lb-con-context" hidden></p>
 
-        <div class="lb-con-dialogue__choices" id="lb-con-choices" hidden>
-            <button type="button" class="lb-btn lb-btn--primary" id="lb-con-choice-write">Escrever</button>
-            <button type="button" class="lb-btn lb-btn--ghost" id="lb-con-choice-auto">Deixar que o Con escolha</button>
-        </div>
+        <div class="lb-con-options" id="lb-con-options" hidden></div>
 
-        <div class="lb-con-dialogue__input-row" id="lb-con-input-row" hidden>
-            <input type="text" id="lb-con-input" class="lb-con-dialogue__input">
+        <div class="lb-con-actions" id="lb-con-actions" hidden></div>
+
+        <div class="lb-con-write" id="lb-con-write" hidden>
+            <input type="text" id="lb-con-input" class="lb-con-write__input" autocomplete="off">
             <button type="button" class="lb-btn lb-btn--primary lb-btn--sm" id="lb-con-input-confirm">Confirmar</button>
         </div>
     </div>
 
-    <form method="post" action="{{ url_for('step_build') }}" class="lb-form" id="lb-build-form"
+    <form method="post" action="{{ url_for('step_build') }}" class="lb-con-form" id="lb-build-form"
           data-first-build="{{ 'true' if not user.onboarding_complete else 'false' }}">
-        {% for item in pending_details %}
-        <input type="hidden" name="detail_{{ item.area }}_{{ item.goal }}" id="detail_{{ item.area }}_{{ item.goal }}" value="">
+        {% for q in questions %}
+            {% if q.type == 'detalhe' %}
+            <input type="hidden" name="detail_{{ q.area }}_{{ q.goal }}" id="field_{{ q.key|replace(':', '_') }}" value="">
+            {% elif q.type == 'direcao' %}
+            <input type="hidden" name="direction_{{ q.area }}_{{ q.goal }}" id="field_{{ q.key|replace(':', '_') }}" value="">
+            {% elif q.type == 'final' %}
+            <input type="hidden" name="extra_note" id="field_extra_note" value="">
+            {% endif %}
         {% endfor %}
     </form>
 
@@ -50,7 +50,7 @@
         <p class="lb-build-loading__text" id="lb-build-loading-text">Calculando sua estratégia...</p>
     </div>
 </section>
-<script id="lb-con-questions-data" type="application/json">{{ pending_details|tojson }}</script>
+<script id="lb-con-questions-data" type="application/json">{{ questions|tojson }}</script>
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/build_loading.js') }}"></script>

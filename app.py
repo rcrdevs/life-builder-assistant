@@ -28,6 +28,7 @@ from data import (
     AREAS, GOALS, NIVEL_LABELS, RECOMMENDATIONS,
     AREA_ICONS, ROTINA_LABEL, PERIOD_LABELS, PAIDEIA_INTRO, PAIDEIA_LEVELS,
     DIET_TYPE_LABELS, GOALS_NEEDING_DETAIL, generic_recommendation, diet_menu_options,
+    GOAL_DIRECTIONS, DIRECTION_FREE_LABEL, suggest_extra_themes,
 )
 from engine import (
     generate_plan, PLAN_DAYS, compute_mission_points,
@@ -1010,37 +1011,81 @@ def step_quickstart():
 @app.route("/onboarding/build", methods=["GET", "POST"])
 @guest_allowed
 def step_build():
-    """Antes de gerar a build de verdade: se algum objetivo escolhido pede um
-    detalhe especifico (GOALS_NEEDING_DETAIL -- ex. qual concurso, qual
-    idioma), o Con pergunta um de cada vez nesta tela (ver
-    static/js/step_build.js). Sem nenhum detalhe pendente, pula direto pro
-    loading. So depois disso _finalize_build roda de verdade."""
+    """Antes de gerar a build de verdade, o Con conversa com o usuario nesta
+    tela (ver static/js/step_build.js), uma pergunta por vez:
+
+    1. `detalhe`  -- objetivos que pedem um texto especifico (qual concurso,
+       qual idioma): GOALS_NEEDING_DETAIL.
+    2. `direcao`  -- objetivos que pedem um direcionamento de multipla escolha
+       (qual tradicao na espiritualidade, que tipo de treino): GOAL_DIRECTIONS.
+       Todo objetivo tem um ou outro, nunca os dois -- antes disso, quem
+       escolhia Espiritualidade/Saude nao via pergunta nenhuma.
+    3. `final`    -- "quer acrescentar mais alguma coisa?", com sugestoes de
+       tema deterministicas (data.suggest_extra_themes) baseadas no que foi
+       escolhido. A resposta vai pra extra_info["panorama_notes"], que ja
+       alimenta o resumo enviado a IA na nota de estrategia.
+
+    So depois de responder tudo o _finalize_build roda de verdade."""
     user = get_user()
     if not user["areas"]:
         return redirect(url_for("step_quickstart"))
 
-    pending_details = [
-        {
-            "area": area, "goal": goal,
+    pairs = flat_goal_pairs(user)
+    directions_saved = user["extra_info"].get("goal_directions", {})
+    questions = []
+
+    for area, goal in pairs:
+        key = f"{area}:{goal}"
+        base = {
+            "area": area, "goal": goal, "key": key,
             "area_label": area_label(user, area), "goal_label": goal_label(user, area, goal),
-            "prompt": info["prompt"], "placeholder": info.get("placeholder", ""),
         }
-        for area, goal in flat_goal_pairs(user)
-        if (area, goal) in GOALS_NEEDING_DETAIL and not user["goal_details"].get(f"{area}:{goal}")
-        for info in [GOALS_NEEDING_DETAIL[(area, goal)]]
-    ]
+        if (area, goal) in GOALS_NEEDING_DETAIL and not user["goal_details"].get(key):
+            info = GOALS_NEEDING_DETAIL[(area, goal)]
+            questions.append({
+                **base, "type": "detalhe",
+                "prompt": info["prompt"], "placeholder": info.get("placeholder", ""),
+            })
+        elif (area, goal) in GOAL_DIRECTIONS and not directions_saved.get(key):
+            info = GOAL_DIRECTIONS[(area, goal)]
+            questions.append({
+                **base, "type": "direcao",
+                "prompt": info["prompt"], "options": info["options"],
+                "free_label": DIRECTION_FREE_LABEL,
+            })
+
+    if not user["onboarding_complete"]:
+        questions.append({
+            "type": "final", "key": "extra_note",
+            "prompt": "Quer acrescentar mais alguma coisa antes de eu montar sua build?",
+            "placeholder": "Ex: tenho uma lesão no joelho, prefiro estudar à noite...",
+            "suggestions": suggest_extra_themes(pairs),
+        })
 
     if request.method == "GET":
-        return render_template("step_build.html", user=user, pending_details=pending_details)
+        return render_template("step_build.html", user=user, questions=questions)
 
     goal_details = dict(user["goal_details"])
-    for area, goal in flat_goal_pairs(user):
-        if (area, goal) not in GOALS_NEEDING_DETAIL:
-            continue
-        valor = request.form.get(f"detail_{area}_{goal}", "").strip()
-        if valor:
-            goal_details[f"{area}:{goal}"] = valor
-    save_user_fields(user["id"], goal_details=goal_details)
+    extra_info = dict(user["extra_info"])
+    directions = dict(directions_saved)
+
+    for area, goal in pairs:
+        key = f"{area}:{goal}"
+        detalhe = request.form.get(f"detail_{area}_{goal}", "").strip()
+        if detalhe:
+            goal_details[key] = detalhe
+        direcao = request.form.get(f"direction_{area}_{goal}", "").strip()
+        if direcao:
+            directions[key] = direcao
+
+    extra_info["goal_directions"] = directions
+    nota = request.form.get("extra_note", "").strip()
+    if nota:
+        # mesma chave que o passo de panorama do fluxo completo ja usava --
+        # entra no resumo do perfil enviado a IA (ver ai.build_profile_summary).
+        extra_info["panorama_notes"] = nota
+
+    save_user_fields(user["id"], goal_details=goal_details, extra_info=extra_info)
 
     user = get_user()
     if not user["onboarding_complete"]:

@@ -287,24 +287,30 @@
                     </div>
                 </div>
                 <div class="lb-rec-block">
-                    <span class="lb-rec-block__label">Vídeos / cursos</span>
+                    <span class="lb-rec-block__label">Canais e vídeos</span>
                     <div class="lb-rec-videos">
                         {% for c in rec.conteudo %}
                         <a href="{{ c.url }}" target="_blank" rel="noopener" class="lb-rec-video">
                             {% if c.thumbnail %}
                             <img src="{{ c.thumbnail }}" alt="" class="lb-rec-video__thumb">
                             {% else %}
-                            <span class="lb-rec-video__thumb lb-rec-video__thumb--placeholder">▶</span>
+                            <span class="lb-rec-video__thumb lb-rec-video__thumb--placeholder">{{ '▶' if c.tipo == 'canal' else '⌕' }}</span>
                             {% endif %}
-                            <span class="lb-rec-video__title">{{ c.titulo }}</span>
+                            <span class="lb-rec-video__body">
+                                <span class="lb-rec-video__title">{{ c.titulo }}</span>
+                                <span class="lb-rec-video__note">{{ c.nota if c.nota else 'busca no YouTube' }}</span>
+                            </span>
                         </a>
                         {% endfor %}
                     </div>
                 </div>
                 <div class="lb-rec-block">
-                    <span class="lb-rec-block__label">Evento sugerido</span>
+                    <span class="lb-rec-block__label">Onde encontrar</span>
                     <a href="{{ rec.evento.link }}" target="_blank" rel="noopener" class="lb-rec-evento">
-                        <span class="lb-rec-evento__desc">{{ rec.evento.desc }}{% if user.basic_info.cidade %} — próximo de {{ user.basic_info.cidade }}{% endif %}</span>
+                        <span class="lb-rec-evento__body">
+                            <span class="lb-rec-evento__desc">{{ rec.evento.desc }}</span>
+                            {% if rec.evento.nota %}<span class="lb-rec-evento__note">{{ rec.evento.nota }}</span>{% endif %}
+                        </span>
                         <span class="lb-rec-evento__arrow">→</span>
                     </a>
                 </div>

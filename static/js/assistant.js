@@ -225,30 +225,68 @@
         updateBubbleDirection(x, y);
     }
 
-    window.addEventListener("resize", roam);
+    // --- Modo "palco": o Con cresce e vira a tela ------------------------
+    // Usado na tela de geracao da build (ver step_build.js): em vez de
+    // desenhar um segundo hexagono grande na pagina (o que fazia o Con
+    // aparecer duplicado), o proprio assistente flutuante para de circular,
+    // vai pro centro e cresce. Ao sair, volta a circular normalmente.
+    var stageMode = false;
+    var roamTimer = null;
+
+    function startRoaming() {
+        if (roamTimer) clearInterval(roamTimer);
+        roamTimer = setInterval(roam, 8000 + Math.random() * 5000);
+    }
+
+    function enterStage() {
+        if (stageMode) return;
+        stageMode = true;
+        if (roamTimer) { clearInterval(roamTimer); roamTimer = null; }
+        clearTimeout(hideTimer);
+        el.classList.remove("lb-assistant--speaking");
+        // limpa o posicionamento inline que o roam() aplica -- sem isso o
+        // estilo inline venceria as regras de .lb-assistant--stage.
+        el.style.left = "";
+        el.style.top = "";
+        el.classList.add("lb-assistant--stage");
+    }
+
+    function exitStage() {
+        if (!stageMode) return;
+        stageMode = false;
+        el.classList.remove("lb-assistant--stage");
+        roam();
+        startRoaming();
+    }
+
+    window.addEventListener("resize", function () { if (!stageMode) roam(); });
 
     roam();
-    setInterval(roam, 8000 + Math.random() * 5000);
+    startRoaming();
 
     setTimeout(function () {
+        if (stageMode) return;
         if (sleepPromptActive) { showSleepPrompt(); return; }
         var lines = LINES[page];
         if (lines && lines.length) say(pick(lines));
     }, 1500);
 
     setInterval(function () {
+        if (stageMode) return;
         if (el.classList.contains("lb-assistant--speaking")) return;
         if (sleepPromptActive) { showSleepPrompt(); return; }
         if (Math.random() < 0.4) say(pick(IDLE_LINES));
     }, 40000);
 
     iconEl.addEventListener("click", function () {
+        if (stageMode) return;  // no palco quem fala e a propria tela
         if (sleepPromptActive) { showSleepPrompt(); return; }
         var lines = (LINES[page] && LINES[page].length) ? LINES[page] : IDLE_LINES;
         say(pick(lines));
     });
 
-    // exposto pra outras telas (ex.: o slider de pratica fisica na etapa 1)
-    // poderem falar pelo balao existente, sem duplicar a logica de "falar".
-    window.LBAssistant = { say: say };
+    // exposto pra outras telas (ex.: o slider de pratica fisica na etapa 1,
+    // e a tela de geracao da build) usarem o assistente que ja existe, sem
+    // duplicar a logica de "falar" nem desenhar um segundo Con.
+    window.LBAssistant = { say: say, enterStage: enterStage, exitStage: exitStage };
 })();

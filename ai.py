@@ -175,6 +175,16 @@ def build_profile_summary(user, area_label_fn, area_goals_label_fn, history=None
             f"- {area_label_fn(user, area)}: {area_goals_label_fn(user, area)} "
             f"(nivel {nivel}, peso {peso}/5)"
         )
+        # direcionamento escolhido pelo usuario na conversa com o Con (ver
+        # GOAL_DIRECTIONS em data.py) -- ex.: qual tradicao espiritual, que
+        # tipo de treino. Da enfase ao que foi escolhido sem excluir o resto.
+        direcoes = [
+            d for g in goals
+            for d in [(user["extra_info"].get("goal_directions") or {}).get(f"{area}:{g}")]
+            if d
+        ]
+        if direcoes:
+            line += " [direcionamento: " + "; ".join(direcoes) + "]"
         h = history.get(area)
         if h:
             extra = []
