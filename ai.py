@@ -13,6 +13,7 @@ opcional, nunca uma dependencia.
 """
 import json
 import os
+import unicodedata
 import urllib.request
 import urllib.error
 
@@ -33,6 +34,13 @@ HTTP_HEADERS_BASE = {
     "Content-Type": "application/json",
     "User-Agent": "LifeBuilder/1.0 (+https://github.com/rcrdevs/life-builder-assistant)",
 }
+
+
+def _normalize_area_key(valor):
+    """minusculas e sem acento -- 'Espiritualidade'/'Saúde' viram
+    'espiritualidade'/'saude', que sao as chaves internas das areas."""
+    texto = unicodedata.normalize("NFKD", str(valor).strip().lower())
+    return "".join(c for c in texto if not unicodedata.combining(c))
 
 
 def _auth_headers(api_key):
@@ -329,10 +337,18 @@ def generate_strategy_note(profile_summary, area_keys):
         parsed = json.loads(data["choices"][0]["message"]["content"].strip())
         if not isinstance(parsed, dict):
             return None, data.get("usage")
-        notes = {
-            k: v.strip() for k, v in parsed.items()
-            if k in area_keys and isinstance(v, str) and v.strip()
-        }
+
+        # O modelo tende a devolver a chave como aparece no resumo, que usa o
+        # rotulo de exibicao ("Espiritualidade", "Saude"), e nao a chave interna
+        # minuscula ("espiritualidade", "saude"). Comparar as duas de forma
+        # crua descartava a nota inteira em silencio -- o sintoma era a nota
+        # simplesmente nao aparecer, mesmo com a API respondendo certo.
+        por_normalizada = {_normalize_area_key(k): k for k in area_keys}
+        notes = {}
+        for chave_bruta, texto in parsed.items():
+            area = por_normalizada.get(_normalize_area_key(chave_bruta))
+            if area and isinstance(texto, str) and texto.strip():
+                notes[area] = texto.strip()
         return (notes or None), data.get("usage")
     except (KeyError, IndexError, ValueError, TypeError, AttributeError):
         return None, data.get("usage")
