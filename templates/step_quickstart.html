@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Comece agora{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">{{ "Sair do teste" if is_guest else "Sair" }}</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard">
+    <p class="lb-eyebrow">Comece agora</p>
+    <h1 class="lb-title">Escolha uma área e um objetivo.</h1>
+    <p class="lb-lede">
+        Seu plano de 14 dias já sai pronto na hora, com missões de verdade pra hoje. Mais áreas,
+        objetivos, medidas e dieta você adiciona depois, direto do painel — sem precisar refazer nada.
+    </p>
+
+    {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
+
+    <form method="post" action="{{ url_for('step_quickstart') }}" class="lb-form">
+        <label class="lb-field">
+            <span>Como podemos te chamar?</span>
+            <input type="text" name="nome" placeholder="Seu nome ou apelido" value="{{ user.nome or '' }}" required>
+        </label>
+
+        <div class="lb-area-grid" id="lb-quickstart-areas">
+            {% for key, label in areas.items() %}
+            <div class="lb-area-card" data-area-key="{{ key }}">
+                <label class="lb-area-card__hit">
+                    <input type="radio" name="area" value="{{ key }}" class="js-quickstart-area" required>
+                    <span class="lb-area-card__icon">{{ area_icons.get(key, '◎') }}</span>
+                    <span class="lb-area-card__label">{{ label }}</span>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% for area_key, area_goals in goals.items() %}
+        <fieldset class="lb-goal-group js-quickstart-goal-group" data-area-key="{{ area_key }}" hidden>
+            <legend>Objetivo em {{ areas.get(area_key, area_key) }}</legend>
+            <div class="lb-goal-options">
+                {% for goal_key, goal_label in area_goals.items() %}
+                <label class="lb-radio-pill">
+                    <input type="radio" name="goal_{{ area_key }}" value="{{ goal_key }}" {{ 'checked' if loop.first else '' }}>
+                    <span>{{ goal_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+        {% endfor %}
+
+        <button type="submit" class="lb-btn lb-btn--primary">Gerar meu plano →</button>
+    </form>
+
+    <p class="lb-auth__switch">
+        <a href="{{ url_for('step_areas') }}">Prefiro configurar tudo agora (várias áreas, medidas, dieta...)</a>
+    </p>
+</section>
+<script src="{{ url_for('static', filename='js/quickstart.js') }}"></script>
+{% endblock %}

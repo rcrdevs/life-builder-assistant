@@ -877,7 +877,7 @@ def builds_delete(build_id):
 # ---------------------------------------------------------------------------
 def next_onboarding_step(user):
     if not user["areas"]:
-        return url_for("step_areas")
+        return url_for("step_quickstart")
     needs_paideia = "saude" not in user["areas"] and not user["extra_info"].get("paideia_nivel")
     if needs_paideia:
         return url_for("step_paideia")
@@ -908,7 +908,57 @@ def guest_start():
     return redirect(url_for("index"))
 
 
-# --- Passo I: areas -----------------------------------------------------
+# --- Onboarding rapido: 1 area + 1 objetivo, plano gerado na hora --------
+# Objetivo (auditoria de UX): sair do zero pro dashboard com missoes reais
+# em menos de 2 minutos. O que fica de fora aqui (mais areas/objetivos,
+# medidas, dieta, detalhe do objetivo) usa os mesmos defaults sensatos que o
+# resto do app ja tinha (nivel iniciante, fallback de {detalhe} em
+# GOALS_NEEDING_DETAIL) e pode ser preenchido depois, direto do dashboard,
+# reaproveitando as mesmas rotas do fluxo completo (step_areas/step_goals/
+# step_info) -- nada foi duplicado, so a entrada ficou mais curta.
+QUICKSTART_DEFAULT_FREE_MINUTES = 60
+
+
+@app.route("/onboarding/quick", methods=["GET", "POST"])
+@guest_allowed
+def step_quickstart():
+    user = get_user()
+    if user["areas"]:
+        # ja tem alguma area definida (ex.: voltou aqui por engano, ou ja
+        # veio do fluxo completo) -- manda pro proximo passo que fizer
+        # sentido em vez de deixar escolher de novo do zero.
+        return redirect(next_onboarding_step(user))
+
+    if request.method == "GET":
+        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user)
+
+    nome = request.form.get("nome", "").strip() or user["nome"] or ""
+    area = request.form.get("area")
+    if area not in AREAS:
+        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user,
+                                erro="Escolha uma área para continuar.")
+    goal = request.form.get(f"goal_{area}") or next(iter(GOALS.get(area, {})), None)
+    if goal not in GOALS.get(area, {}):
+        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user,
+                                erro="Escolha um objetivo para continuar.")
+
+    extra_info = dict(user["extra_info"])
+    extra_info["area_tiers"] = {area: "principal"}
+    extra_info["onboarding_mode"] = "quick"  # ver banner "Complete seu perfil" no dashboard
+    basic_info = dict(user["basic_info"])
+    basic_info["tempo_livre_min"] = QUICKSTART_DEFAULT_FREE_MINUTES
+
+    save_user_fields(
+        user["id"], nome=nome, areas=[area], goals={area: [goal]},
+        pesos={area: AREA_TIER_WEIGHTS["principal"]}, niveis={area: "iniciante"},
+        basic_info=basic_info, extra_info=extra_info,
+    )
+    user = get_user()
+    _finalize_build(user)
+    return redirect(url_for("dashboard"))
+
+
+# --- Passo I: areas (fluxo completo -- mais areas/objetivos, medidas, dieta) --
 @app.route("/onboarding/areas", methods=["GET", "POST"])
 @guest_allowed
 def step_areas():
@@ -1466,6 +1516,10 @@ def dashboard():
         missions_by_area.setdefault(m["area"], []).append(m)
 
     level, xp_in_level, xp_to_next = xp_level_progress(user["vitality_points_accum"] or 0)
+    show_profile_prompt = (
+        user["extra_info"].get("onboarding_mode") == "quick"
+        and not user["extra_info"].get("profile_prompt_dismissed")
+    )
 
     return render_template(
         "dashboard.html",
@@ -1475,6 +1529,7 @@ def dashboard():
         total_missions=total_missions,
         logged_missions=logged_missions,
         week_completion_pct=week_completion_pct,
+        show_profile_prompt=show_profile_prompt,
         level=level,
         xp_in_level=round(xp_in_level),
         xp_to_next=round(xp_to_next) if xp_to_next is not None else None,
@@ -1503,6 +1558,18 @@ def dashboard():
             db.execute("SELECT * FROM accounts WHERE id=?", (session.get("account_id"),)).fetchone()
         ) if ai.ai_available() and not session.get("is_guest") else None),
     )
+
+
+@app.route("/dashboard/dismiss_profile_prompt", methods=["POST"])
+@guest_allowed
+def dismiss_profile_prompt():
+    user = get_user()
+    db = get_db()
+    extra_info = dict(user["extra_info"])
+    extra_info["profile_prompt_dismissed"] = True
+    db.execute("UPDATE users SET extra_info=? WHERE id=?", (json.dumps(extra_info), user["id"]))
+    db.commit()
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/plano")

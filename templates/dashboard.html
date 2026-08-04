@@ -53,6 +53,21 @@
 </div>
 {% endif %}
 
+{% if show_profile_prompt %}
+<div class="lb-guest-banner">
+    <div>
+        <p class="lb-guest-banner__title">Seu plano começou só com o essencial.</p>
+        <p>Você escolheu 1 área pra começar rápido. Quando quiser, dá pra adicionar mais áreas e objetivos, medidas e dieta — sem perder nada do que já foi feito.</p>
+    </div>
+    <div class="lb-guest-banner__actions">
+        <a href="{{ url_for('step_areas') }}" class="lb-btn lb-btn--primary lb-btn--sm">Completar meu perfil →</a>
+        <form method="post" action="{{ url_for('dismiss_profile_prompt') }}">
+            <button type="submit" class="lb-btn lb-btn--ghost lb-btn--sm">Agora não</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 {% if ai_strategy %}
 <div class="lb-ai-note">
     <span class="lb-ai-note__tag">Estratégia personalizada · IA</span>
