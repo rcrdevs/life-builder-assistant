@@ -247,4 +247,8 @@
         var lines = (LINES[page] && LINES[page].length) ? LINES[page] : IDLE_LINES;
         say(pick(lines));
     });
+
+    // exposto pra outras telas (ex.: o slider de pratica fisica na etapa 1)
+    // poderem falar pelo balao existente, sem duplicar a logica de "falar".
+    window.LBAssistant = { say: say };
 })();

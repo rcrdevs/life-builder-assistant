@@ -132,10 +132,24 @@ input[type="text"], input[type="number"], input[type="email"], input[type="passw
     font-size: 15px;
 }
 textarea { font-size: 14px; resize: vertical; }
-input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-within, .lb-area-card:focus-within {
+input:focus, select:focus, textarea:focus, button:focus {
     outline: none;
     border-color: var(--neon);
     box-shadow: 0 0 0 3px var(--neon-glow);
+}
+/* Cards de multipla escolha (area/objetivo): o estado "selecionado" ja usa
+   borda+glow neon (:has(input:checked) abaixo), entao o foco de teclado
+   precisa de uma linguagem visual diferente -- senao um card desmarcado mas
+   ainda focado parece "ainda selecionado". :focus-visible so acende em
+   navegacao por teclado (Tab), nao em clique de mouse, que era exatamente o
+   caso do contorno "grudado" depois de desmarcar com o mouse. */
+.lb-area-card:has(:focus-visible), .lb-radio-pill:has(:focus-visible) {
+    outline: 2px solid var(--chrome-bright);
+    outline-offset: 2px;
+}
+.lb-area-tier-btn:focus-visible {
+    outline: 2px solid var(--chrome-bright);
+    outline-offset: 2px;
 }
 
 .lb-error { color: var(--alert); font-size: 14px; }
@@ -172,17 +186,29 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
     font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase;
     padding: 3px 7px; border-radius: 10px;
     background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--line);
-    display: none;
+    opacity: 0; transition: opacity .15s ease;
 }
-.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__tier-tag { display: inline-block; }
+.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__tier-tag { opacity: 1; }
 
+/* O espaco do seletor de prioridade fica sempre reservado (visibility/opacity
+   em vez de display:none) -- assim todo card do grid mantem a mesma altura,
+   esteja marcado ou nao, em vez de "crescer" só quando marcado e deixar os
+   vizinhos da mesma linha com espaco vazio desalinhado. */
 .lb-area-tier-picker {
-    display: none;
+    display: flex;
     gap: 8px;
     justify-content: center;
     padding: 0 10px 14px;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s ease;
 }
-.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-tier-picker { display: flex; }
+.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-tier-picker {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
 .lb-area-tier-btn {
     flex: 0 0 auto;
     width: 26px; height: 26px;
@@ -1067,6 +1093,61 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 
 @media (max-width: 640px) {
     .lb-build-loading__figure { width: 150px; height: 150px; }
+}
+
+/* --- Slider fixo de pratica fisica (etapa 1) --- */
+.lb-pratica-fisica {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 20px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface);
+}
+.lb-pratica-fisica__head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    font-size: 14px; color: var(--text);
+}
+.lb-pratica-fisica__value {
+    font-family: var(--font-mono); font-size: 18px; color: var(--neon-bright);
+}
+.lb-pratica-fisica__legend { font-size: 12.5px; color: var(--text-dim); margin: 0; }
+
+/* --- Tela do Con: dialogo antes de gerar a build --- */
+.lb-con-stage {
+    display: flex; flex-direction: column; align-items: center; gap: 26px;
+    text-align: center; padding-top: 24px;
+}
+.lb-con-figure { width: 128px; height: 128px; }
+.lb-con-figure svg { width: 100%; height: 100%; overflow: visible; }
+.lb-con-figure__ring { fill: none; }
+.lb-con-figure__ring--outer {
+    stroke: var(--neon-bright); stroke-width: 1.6;
+    filter: drop-shadow(0 0 6px var(--neon-glow));
+    transform-box: fill-box; transform-origin: center;
+    animation: lb-assistant-spin 10s linear infinite;
+}
+.lb-con-figure__inner-spin {
+    transform-box: fill-box; transform-origin: center;
+    animation: lb-assistant-spin-rev 5.5s linear infinite;
+}
+.lb-con-figure__ring--inner { stroke: var(--neon-bright); stroke-width: 2; opacity: 0.9; }
+.lb-con-figure__core { fill: var(--neon-bright); filter: drop-shadow(0 0 5px var(--neon-bright)); }
+
+.lb-con-dialogue {
+    max-width: 440px; width: 100%;
+    background: var(--surface); border: 1px solid var(--neon);
+    border-radius: var(--radius); padding: 22px 26px;
+    box-shadow: 0 0 20px var(--neon-glow);
+    display: flex; flex-direction: column; gap: 14px;
+}
+.lb-con-dialogue__progress {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--neon-bright); margin: 0;
+}
+.lb-con-dialogue__text { font-size: 15.5px; line-height: 1.5; margin: 0; color: var(--text); }
+.lb-con-dialogue__choices { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.lb-con-dialogue__input-row { display: flex; gap: 8px; }
+.lb-con-dialogue__input {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+    padding: 10px 12px; border-radius: var(--radius); font-family: var(--font-body); font-size: 14px;
 }
 
 /* --- Pergunta interativa do assistente (dentro da bolha) --- */

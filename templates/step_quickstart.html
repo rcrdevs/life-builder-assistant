@@ -8,10 +8,10 @@
 {% block content %}
 <section class="lb-onboard">
     <p class="lb-eyebrow">Comece agora</p>
-    <h1 class="lb-title">Escolha uma área e um objetivo.</h1>
+    <h1 class="lb-title">Escolha suas áreas e objetivos.</h1>
     <p class="lb-lede">
-        Seu plano de 14 dias já sai pronto na hora, com missões de verdade pra hoje. Mais áreas,
-        objetivos, medidas e dieta você adiciona depois, direto do painel — sem precisar refazer nada.
+        Seu plano de 14 dias já sai pronto na hora, com missões de verdade pra hoje. Medidas e dieta
+        você adiciona depois, direto do painel — sem precisar refazer nada.
     </p>
 
     {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
@@ -22,25 +22,30 @@
             <input type="text" name="nome" placeholder="Seu nome ou apelido" value="{{ user.nome or '' }}" required>
         </label>
 
-        <div class="lb-area-grid" id="lb-quickstart-areas">
+        <p class="lb-hint">A primeira área que você marcar vira seu <strong>objetivo principal</strong>
+            (destaque amarelo). Nas outras, escolha se ficam como <strong>secundárias</strong> ou só
+            como <strong>plano de fundo</strong>.</p>
+
+        <div class="lb-area-grid" id="lb-area-grid">
             {% for key, label in areas.items() %}
             <div class="lb-area-card" data-area-key="{{ key }}">
                 <label class="lb-area-card__hit">
-                    <input type="radio" name="area" value="{{ key }}" class="js-quickstart-area" required>
+                    <input type="checkbox" name="areas" value="{{ key }}" class="js-quickstart-area">
                     <span class="lb-area-card__icon">{{ area_icons.get(key, '◎') }}</span>
                     <span class="lb-area-card__label">{{ label }}</span>
                 </label>
+                {% include "_area_tier_picker.html" %}
             </div>
             {% endfor %}
         </div>
 
         {% for area_key, area_goals in goals.items() %}
         <fieldset class="lb-goal-group js-quickstart-goal-group" data-area-key="{{ area_key }}" hidden>
-            <legend>Objetivo em {{ areas.get(area_key, area_key) }}</legend>
+            <legend>Objetivos em {{ areas.get(area_key, area_key) }}</legend>
             <div class="lb-goal-options">
                 {% for goal_key, goal_label in area_goals.items() %}
                 <label class="lb-radio-pill">
-                    <input type="radio" name="goal_{{ area_key }}" value="{{ goal_key }}" {{ 'checked' if loop.first else '' }}>
+                    <input type="checkbox" name="goal_{{ area_key }}" value="{{ goal_key }}">
                     <span>{{ goal_label }}</span>
                 </label>
                 {% endfor %}
@@ -48,12 +53,23 @@
         </fieldset>
         {% endfor %}
 
-        <button type="submit" class="lb-btn lb-btn--primary">Gerar meu plano →</button>
+        <div class="lb-pratica-fisica">
+            <div class="lb-pratica-fisica__head">
+                <span>Nível de prática física hoje</span>
+                <span class="lb-pratica-fisica__value" id="lb-pratica-fisica-value">5</span>
+            </div>
+            <input type="range" min="0" max="10" step="1" value="5" name="pratica_fisica"
+                   id="lb-pratica-fisica" class="lb-volume-slider">
+            <p class="lb-pratica-fisica__legend" id="lb-pratica-fisica-legend">Moderado — atividade física regular, sem exageros.</p>
+        </div>
+
+        <button type="submit" class="lb-btn lb-btn--primary">Continuar →</button>
     </form>
 
     <p class="lb-auth__switch">
-        <a href="{{ url_for('step_areas') }}">Prefiro configurar tudo agora (várias áreas, medidas, dieta...)</a>
+        <a href="{{ url_for('step_areas') }}">Prefiro configurar tudo agora (medidas, dieta...)</a>
     </p>
 </section>
+<script src="{{ url_for('static', filename='js/area_tiers.js') }}"></script>
 <script src="{{ url_for('static', filename='js/quickstart.js') }}"></script>
 {% endblock %}

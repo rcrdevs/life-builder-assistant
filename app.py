@@ -908,15 +908,25 @@ def guest_start():
     return redirect(url_for("index"))
 
 
-# --- Onboarding rapido: 1 area + 1 objetivo, plano gerado na hora --------
-# Objetivo (auditoria de UX): sair do zero pro dashboard com missoes reais
-# em menos de 2 minutos. O que fica de fora aqui (mais areas/objetivos,
-# medidas, dieta, detalhe do objetivo) usa os mesmos defaults sensatos que o
-# resto do app ja tinha (nivel iniciante, fallback de {detalhe} em
-# GOALS_NEEDING_DETAIL) e pode ser preenchido depois, direto do dashboard,
-# reaproveitando as mesmas rotas do fluxo completo (step_areas/step_goals/
-# step_info) -- nada foi duplicado, so a entrada ficou mais curta.
+# --- Onboarding rapido: areas+objetivos+pratica fisica numa tela so --------
+# Objetivo (auditoria de UX): sair do zero pro dashboard com missoes reais em
+# menos de 2 minutos. Fica de fora aqui (e pode ser preenchido depois, direto
+# do dashboard, reaproveitando as mesmas rotas do fluxo completo -- nada foi
+# duplicado): medidas, dieta, e o detalhe especifico de cada objetivo (isso
+# ultimo agora e perguntado pelo Con na tela seguinte, ver step_build()).
 QUICKSTART_DEFAULT_FREE_MINUTES = 60
+# limiares do slider de pratica fisica (1-10, 0 nao e permitido) pros 3
+# niveis que MISSION_TEMPLATES/RECOMMENDATIONS ja entendem -- mesmos niveis
+# que step_paideia() ja usava, so que perguntados sempre em vez de so quando
+# nenhuma area de saude foi escolhida.
+PRATICA_FISICA_BUCKETS = [(3, "paideia_basico"), (7, "paideia_moderado"), (10, "paideia_avancado")]
+
+
+def _pratica_fisica_nivel(valor):
+    for limite, nivel in PRATICA_FISICA_BUCKETS:
+        if valor <= limite:
+            return nivel
+    return PRATICA_FISICA_BUCKETS[-1][1]
 
 
 @app.route("/onboarding/quick", methods=["GET", "POST"])
@@ -932,29 +942,109 @@ def step_quickstart():
     if request.method == "GET":
         return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user)
 
+    def _render_erro(msg):
+        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user,
+                                erro=msg)
+
     nome = request.form.get("nome", "").strip() or user["nome"] or ""
-    area = request.form.get("area")
-    if area not in AREAS:
-        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user,
-                                erro="Escolha uma área para continuar.")
-    goal = request.form.get(f"goal_{area}") or next(iter(GOALS.get(area, {})), None)
-    if goal not in GOALS.get(area, {}):
-        return render_template("step_quickstart.html", areas=AREAS, area_icons=AREA_ICONS, goals=GOALS, user=user,
-                                erro="Escolha um objetivo para continuar.")
+    areas = [a for a in request.form.getlist("areas") if a in AREAS]
+    if not areas:
+        return _render_erro("Escolha ao menos uma área para continuar.")
+
+    raw_tiers = {a: request.form.get(f"tier_{a}", "secundario") for a in areas}
+    seen_principal = False
+    area_tiers = {}
+    for area in areas:
+        tier = raw_tiers.get(area) or "secundario"
+        if tier not in AREA_TIER_WEIGHTS:
+            tier = "secundario"
+        if tier == "principal":
+            if seen_principal:
+                tier = "secundario"
+            else:
+                seen_principal = True
+        area_tiers[area] = tier
+
+    goals = {}
+    for area in areas:
+        chosen = [g for g in request.form.getlist(f"goal_{area}") if g in GOALS.get(area, {})]
+        # se marcou a area mas nao marcou nenhum objetivo dela, usa o
+        # primeiro da lista como padrao -- evita uma tela de erro por um
+        # detalhe menor quando a intencao (a area) ja ficou clara.
+        goals[area] = chosen or [next(iter(GOALS.get(area, {})), None)]
+        goals[area] = [g for g in goals[area] if g]
+
+    try:
+        pratica_fisica = int(request.form.get("pratica_fisica", 5))
+    except (TypeError, ValueError):
+        pratica_fisica = 5
+    pratica_fisica = max(1, min(10, pratica_fisica))  # defesa: o slider ja bloqueia 0 no cliente
+
+    pesos = {a: AREA_TIER_WEIGHTS[area_tiers[a]] for a in areas}
+    niveis = {a: "iniciante" for a in areas}
 
     extra_info = dict(user["extra_info"])
-    extra_info["area_tiers"] = {area: "principal"}
+    extra_info["area_tiers"] = area_tiers
     extra_info["onboarding_mode"] = "quick"  # ver banner "Complete seu perfil" no dashboard
+    extra_info["pratica_fisica"] = pratica_fisica
+
+    if "saude" not in areas:
+        nivel_saude = _pratica_fisica_nivel(pratica_fisica)
+        areas = areas + ["saude"]
+        goals["saude"] = [nivel_saude]
+        area_tiers["saude"] = "secundario"
+        pesos["saude"] = AREA_TIER_WEIGHTS["secundario"]
+        niveis["saude"] = "iniciante"
+        extra_info["paideia_nivel"] = nivel_saude
+
     basic_info = dict(user["basic_info"])
     basic_info["tempo_livre_min"] = QUICKSTART_DEFAULT_FREE_MINUTES
 
     save_user_fields(
-        user["id"], nome=nome, areas=[area], goals={area: [goal]},
-        pesos={area: AREA_TIER_WEIGHTS["principal"]}, niveis={area: "iniciante"},
-        basic_info=basic_info, extra_info=extra_info,
+        user["id"], nome=nome, areas=areas, goals=goals,
+        pesos=pesos, niveis=niveis, basic_info=basic_info, extra_info=extra_info,
     )
+    return redirect(url_for("step_build"))
+
+
+@app.route("/onboarding/build", methods=["GET", "POST"])
+@guest_allowed
+def step_build():
+    """Antes de gerar a build de verdade: se algum objetivo escolhido pede um
+    detalhe especifico (GOALS_NEEDING_DETAIL -- ex. qual concurso, qual
+    idioma), o Con pergunta um de cada vez nesta tela (ver
+    static/js/step_build.js). Sem nenhum detalhe pendente, pula direto pro
+    loading. So depois disso _finalize_build roda de verdade."""
     user = get_user()
-    _finalize_build(user)
+    if not user["areas"]:
+        return redirect(url_for("step_quickstart"))
+
+    pending_details = [
+        {
+            "area": area, "goal": goal,
+            "area_label": area_label(user, area), "goal_label": goal_label(user, area, goal),
+            "prompt": info["prompt"], "placeholder": info.get("placeholder", ""),
+        }
+        for area, goal in flat_goal_pairs(user)
+        if (area, goal) in GOALS_NEEDING_DETAIL and not user["goal_details"].get(f"{area}:{goal}")
+        for info in [GOALS_NEEDING_DETAIL[(area, goal)]]
+    ]
+
+    if request.method == "GET":
+        return render_template("step_build.html", user=user, pending_details=pending_details)
+
+    goal_details = dict(user["goal_details"])
+    for area, goal in flat_goal_pairs(user):
+        if (area, goal) not in GOALS_NEEDING_DETAIL:
+            continue
+        valor = request.form.get(f"detail_{area}_{goal}", "").strip()
+        if valor:
+            goal_details[f"{area}:{goal}"] = valor
+    save_user_fields(user["id"], goal_details=goal_details)
+
+    user = get_user()
+    if not user["onboarding_complete"]:
+        _finalize_build(user)
     return redirect(url_for("dashboard"))
 
 
