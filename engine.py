@@ -34,6 +34,18 @@ TOTAL_DAY_MINUTES = 480
 AVG_PRIMARY_MIN = 30     # duracao media assumida de uma missao primaria (min)
 AVG_SECONDARY_MIN = 15   # duracao media assumida de uma missao secundaria (min)
 
+# Trava contra repeticao excessiva: quando poucas areas dividem um orcamento
+# de tempo grande (ex.: onboarding rapido com so 1-3 areas), a conta de
+# "quantas missoes cabem no tempo" pode passar muito do tamanho do pool de
+# templates -- sem essa trava, itertools.cycle repete a mesma descricao 8-12x
+# no mesmo dia. Cada template pode aparecer no maximo essa quantidade de
+# vezes por dia; o tempo que sobrar alem disso simplesmente nao vira missao
+# extra (o orcamento de 8h sempre foi uma heuristica de dimensionamento, nao
+# uma promessa exibida ao usuario).
+MAX_TEMPLATE_REPEATS_PER_DAY = 2
+MAX_PRIMARY_DURATION_MIN = 90
+MAX_SECONDARY_DURATION_MIN = 30
+
 
 
 def compute_mission_points(base_points, completion_pct):
@@ -141,6 +153,8 @@ def generate_plan(area_goal_pairs, niveis, pesos, tempo_livre_min, cycle,
             "primary_min": pair_primary_min, "secondary_min": pair_secondary_min,
             "primary_cycle": itertools.cycle(primary_pool),
             "secondary_cycle": itertools.cycle(secondary_pool),
+            "primary_pool_size": len(primary_pool),
+            "secondary_pool_size": len(secondary_pool),
         })
 
     rotina_cycle = itertools.cycle(ROTINA_MISSIONS)
@@ -179,7 +193,8 @@ def generate_plan(area_goal_pairs, niveis, pesos, tempo_livre_min, cycle,
         # pelo peso de cada area)
         for pp in pair_plans:
             n_primary = max(1, round(pp["primary_min"] / AVG_PRIMARY_MIN)) if pp["primary_min"] > 0 else 0
-            duration_primary = pp["primary_min"] / n_primary if n_primary else 0
+            n_primary = min(n_primary, pp["primary_pool_size"] * MAX_TEMPLATE_REPEATS_PER_DAY)
+            duration_primary = min(pp["primary_min"] / n_primary, MAX_PRIMARY_DURATION_MIN) if n_primary else 0
             for _ in range(n_primary):
                 t = next(pp["primary_cycle"])
                 detail = _maybe_workout_detail(pp["area"], pp["goal"], t["desc"])
@@ -193,7 +208,8 @@ def generate_plan(area_goal_pairs, niveis, pesos, tempo_livre_min, cycle,
                 })
 
             n_secondary = max(1, round(pp["secondary_min"] / AVG_SECONDARY_MIN)) if pp["secondary_min"] > 0 else 0
-            duration_secondary = pp["secondary_min"] / n_secondary if n_secondary else 0
+            n_secondary = min(n_secondary, pp["secondary_pool_size"] * MAX_TEMPLATE_REPEATS_PER_DAY)
+            duration_secondary = min(pp["secondary_min"] / n_secondary, MAX_SECONDARY_DURATION_MIN) if n_secondary else 0
             for _ in range(n_secondary):
                 t = next(pp["secondary_cycle"])
                 detail = _maybe_workout_detail(pp["area"], pp["goal"], t["desc"])

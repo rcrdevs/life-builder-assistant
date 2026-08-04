@@ -186,12 +186,15 @@
         </div>
         {% endif %}
 
+        {% set period_icons = {"manha": "○", "tarde": "◐", "noite": "●"} %}
         {% if missions_today %}
         {% for area, missions in missions_by_area.items() %}
         {% set done_count = missions|selectattr('completion_pct', 'defined')|rejectattr('completion_pct', 'none')|list|length %}
         <details class="lb-category-block" data-category-area="{{ area }}" {% if loop.first %}open{% endif %}>
             <summary class="lb-category-block__summary">
+                <span class="lb-category-block__icon">{{ area_icons.get(area, '∴') }}</span>
                 <span class="lb-category-block__title">{{ area_labels.get(area, area) }}</span>
+                <span class="lb-category-block__bar"><span class="lb-category-block__bar-fill" style="width: {{ (done_count / missions|length * 100) if missions|length else 0 }}%"></span></span>
                 <span class="lb-category-block__count">{{ done_count }}/{{ missions|length }}</span>
             </summary>
             <ul class="lb-mission-list">
@@ -201,9 +204,9 @@
                     <div class="lb-mission__top">
                         <div class="lb-mission__body">
                             <span class="lb-mission__area">
-                                <span class="lb-mission__period">{{ period_labels.get(m.period, m.period) }}</span> ·
-                                <span class="lb-mission__tier lb-mission__tier--{{ m.tier }}">{{ tier_labels.get(m.tier, m.tier) }}</span> ·
-                                {{ m.duration_min|round }} min
+                                <span class="lb-mission__period" title="{{ period_labels.get(m.period, m.period) }}">{{ period_icons.get(m.period, '○') }} {{ period_labels.get(m.period, m.period) }}</span>
+                                <span class="lb-mission__tier lb-mission__tier--{{ m.tier }}">{{ tier_labels.get(m.tier, m.tier) }}</span>
+                                <span class="lb-mission__duration">{{ m.duration_min|round }} min</span>
                             </span>
                             <span class="lb-mission__desc">{{ m.description }}</span>
                             {% if m.detail %}
@@ -214,7 +217,7 @@
                             {% endif %}
                         </div>
                         {% if m.completion_pct is not none %}
-                        <span class="lb-mission__done-tag">{{ m.completion_pct|round }}% registrado</span>
+                        <span class="lb-mission__done-tag">✓ {{ m.completion_pct|round }}% registrado</span>
                         {% endif %}
                     </div>
                     {% if m.completion_pct is none %}
@@ -248,45 +251,60 @@
 
         {% for rec in recs %}
         <div class="lb-rec-card">
-            <p class="lb-rec-card__title">{{ rec.area_label }} · {{ rec.goal_label }}</p>
+            <p class="lb-rec-card__title">
+                <span class="lb-rec-card__icon">{{ area_icons.get(rec.area, '∴') }}</span>
+                {{ rec.area_label }} <span class="lb-rec-card__sep">·</span> {{ rec.goal_label }}
+            </p>
             <div class="lb-rec-block">
                 <span class="lb-rec-block__label">Livros</span>
-                <ul class="lb-rec-livros">
+                <div class="lb-rec-items">
                     {% for l in rec.livros %}
-                    <li>
-                        <span class="lb-rec-livro">
-                            <a href="{{ l.link }}" target="_blank" rel="noopener" class="lb-rec-livro__trigger">{{ l.titulo }}</a>{% if l.autor %}, de {{ l.autor }}{% endif %}
-                            {% if l.opcoes and l.opcoes|length > 1 %}
-                            <div class="lb-rec-livro__popover">
-                                <p class="lb-rec-livro__popover-title">Onde encontrar</p>
-                                {% for op in l.opcoes %}
-                                <a href="{{ op.url }}" target="_blank" rel="noopener" class="lb-rec-livro__opcao">
-                                    <span class="lb-rec-livro__loja">{{ op.loja }}</span>
-                                    <span class="lb-rec-livro__preco">{{ op.preco_nota }}</span>
-                                </a>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </span>
-                        <span class="lb-rec-preco">{{ l.preco_nota }}</span>
-                    </li>
+                    <div class="lb-rec-item">
+                        <div class="lb-rec-item__main">
+                            <span class="lb-rec-livro">
+                                <a href="{{ l.link }}" target="_blank" rel="noopener" class="lb-rec-item__title lb-rec-livro__trigger">{{ l.titulo }}</a>
+                                {% if l.opcoes and l.opcoes|length > 1 %}
+                                <div class="lb-rec-livro__popover">
+                                    <p class="lb-rec-livro__popover-title">Onde encontrar</p>
+                                    {% for op in l.opcoes %}
+                                    <a href="{{ op.url }}" target="_blank" rel="noopener" class="lb-rec-livro__opcao">
+                                        <span class="lb-rec-livro__loja">{{ op.loja }}</span>
+                                        <span class="lb-rec-livro__preco">{{ op.preco_nota }}</span>
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </span>
+                            {% if l.autor %}<span class="lb-rec-item__meta">de {{ l.autor }}</span>{% endif %}
+                        </div>
+                        <span class="lb-rec-item__price">{{ l.preco_nota }}</span>
+                    </div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
             <div class="lb-rec-block">
                 <span class="lb-rec-block__label">Vídeos / cursos</span>
                 <div class="lb-rec-videos">
                     {% for c in rec.conteudo %}
                     <a href="{{ c.url }}" target="_blank" rel="noopener" class="lb-rec-video">
-                        {% if c.thumbnail %}<img src="{{ c.thumbnail }}" alt="" class="lb-rec-video__thumb">{% endif %}
-                        <span>{{ c.titulo }}</span>
+                        <span class="lb-rec-video__thumb-wrap">
+                            {% if c.thumbnail %}
+                            <img src="{{ c.thumbnail }}" alt="" class="lb-rec-video__thumb">
+                            {% else %}
+                            <span class="lb-rec-video__thumb lb-rec-video__thumb--placeholder">▶</span>
+                            {% endif %}
+                        </span>
+                        <span class="lb-rec-video__title">{{ c.titulo }}</span>
                     </a>
                     {% endfor %}
                 </div>
             </div>
             <div class="lb-rec-block lb-rec-block--evento">
                 <span class="lb-rec-block__label">Evento sugerido</span>
-                <a href="{{ rec.evento.link }}" target="_blank" rel="noopener">{{ rec.evento.desc }}{% if user.basic_info.cidade %} — próximo de {{ user.basic_info.cidade }}{% endif %}</a>
+                <a href="{{ rec.evento.link }}" target="_blank" rel="noopener" class="lb-rec-evento">
+                    <span class="lb-rec-evento__desc">{{ rec.evento.desc }}{% if user.basic_info.cidade %} — próximo de {{ user.basic_info.cidade }}{% endif %}</span>
+                    <span class="lb-rec-evento__arrow">→</span>
+                </a>
             </div>
         </div>
         {% endfor %}

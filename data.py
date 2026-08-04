@@ -12,11 +12,23 @@ def amazon_link(query):
     return f"https://www.amazon.com.br/s?k={_urlquote(query)}"
 
 
+def _google_site_search_link(query, site):
+    """Busca no Google restrita a um site especifico (site:dominio.com) --
+    usado quando a busca interna do proprio site nao tem uma URL confiavel
+    (ver mercadolivre_link/sympla_search_link: verificado ao vivo que o path
+    de busca "direto" delas nao funciona mais -- Mercado Livre pede login
+    antes de mostrar resultado, e a busca da Sympla roda só em JS no cliente,
+    sem refletir o termo na URL. Busca via Google sempre funciona e ainda
+    leva a resultados reais dentro do site certo."""
+    return f"https://www.google.com/search?q={_urlquote(query)}+site:{site}"
+
+
 def mercadolivre_link(query):
-    """Link de busca real e funcional no Mercado Livre Brasil (o site usa
-    palavras separadas por hífen no path, não %20 — verificado ao vivo)."""
-    slug = _urlquote("-".join(query.split()))
-    return f"https://lista.mercadolivre.com.br/{slug}"
+    """Busca no Mercado Livre Brasil via Google (site:mercadolivre.com.br) --
+    o path de busca direto (lista.mercadolivre.com.br/<slug>) passou a exigir
+    login antes de mostrar resultado (verificado ao vivo), então deixou de
+    ser um link funcional sem conta."""
+    return _google_site_search_link(query, "mercadolivre.com.br")
 
 
 def estante_virtual_link(query):
@@ -40,10 +52,13 @@ def youtube_video(video_id, titulo):
 
 
 def sympla_search_link(query):
-    """Link de busca real e funcional de eventos no Sympla. (O padrão antigo
-    '/busca#q=' usava um fragmento de URL que a Sympla não interpreta mais —
-    verificado ao vivo: a busca real fica em /eventos/todos-eventos?s=.)"""
-    return f"https://www.sympla.com.br/eventos/todos-eventos?s={_urlquote(query)}"
+    """Busca de eventos no Sympla via Google (site:sympla.com.br). A busca da
+    Sympla roda inteiramente em JS no navegador (widget Algolia) -- mesmo
+    digitando e apertando enter na busca real do site, o termo nunca aparece
+    na URL (fica só "/#pesquisar"), então não existe um link direto
+    confiável para "resultados de X no Sympla". Busca via Google contorna
+    isso e ainda assim leva a eventos reais dentro do Sympla."""
+    return _google_site_search_link(query, "sympla.com.br")
 
 
 def livro(titulo, autor, link=None, preco_nota="Ver preço atual na loja"):

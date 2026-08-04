@@ -1573,6 +1573,7 @@ def dashboard():
             label = user["custom_goal_labels"].get(f"{area}:{gk}") or user["custom_area_labels"].get(area) or gk
             rec = generic_recommendation(label)
         recs.append({
+            "area": area,
             "area_label": area_label(user, area),
             "goal_label": goal_label(user, area, gk),
             **rec,
@@ -1630,6 +1631,7 @@ def dashboard():
         overall_progress=overall_progress,
         recs=recs,
         area_labels=ALL_AREA_LABELS,
+        area_icons=AREA_ICONS,
         goal_labels=GOALS,
         period_labels=PERIOD_LABELS,
         tier_labels=TIER_LABELS,
