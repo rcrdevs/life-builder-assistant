@@ -34,15 +34,18 @@ TOTAL_DAY_MINUTES = 480
 AVG_PRIMARY_MIN = 30     # duracao media assumida de uma missao primaria (min)
 AVG_SECONDARY_MIN = 15   # duracao media assumida de uma missao secundaria (min)
 
-# Trava contra repeticao excessiva: quando poucas areas dividem um orcamento
-# de tempo grande (ex.: onboarding rapido com so 1-3 areas), a conta de
-# "quantas missoes cabem no tempo" pode passar muito do tamanho do pool de
-# templates -- sem essa trava, itertools.cycle repete a mesma descricao 8-12x
-# no mesmo dia. Cada template pode aparecer no maximo essa quantidade de
-# vezes por dia; o tempo que sobrar alem disso simplesmente nao vira missao
-# extra (o orcamento de 8h sempre foi uma heuristica de dimensionamento, nao
-# uma promessa exibida ao usuario).
-MAX_TEMPLATE_REPEATS_PER_DAY = 2
+# Trava contra repeticao: quando poucas areas dividem um orcamento de tempo
+# grande (ex.: onboarding rapido com so 1-3 areas), a conta de "quantas
+# missoes cabem no tempo" pode passar muito do tamanho do pool de templates
+# -- sem essa trava, itertools.cycle repetia a mesma descricao 8-12x no mesmo
+# dia. Com 1, nenhuma missao aparece duas vezes no mesmo dia: ver a mesma
+# tarefa repetida na lista de hoje sempre parece bug pro usuario, mesmo que
+# a intencao fosse "faca isso duas vezes". O tempo que sobrar alem disso nao
+# vira missao extra (o orcamento de 8h sempre foi uma heuristica de
+# dimensionamento, nao uma promessa exibida ao usuario). A variedade entre
+# DIAS continua existindo -- itertools.cycle segue avancando de um dia pro
+# outro, entao dias diferentes comecam em pontos diferentes do pool.
+MAX_TEMPLATE_REPEATS_PER_DAY = 1
 MAX_PRIMARY_DURATION_MIN = 90
 MAX_SECONDARY_DURATION_MIN = 30
 

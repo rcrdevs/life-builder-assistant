@@ -183,9 +183,12 @@ input:focus, select:focus, textarea:focus, button:focus {
     cursor: pointer;
 }
 .lb-area-card__hit input { position: absolute; opacity: 0; }
-.lb-area-card:has(.lb-area-card__hit input:checked) { border-color: var(--neon); background: var(--surface-2); box-shadow: 0 0 12px var(--neon-glow); }
+/* `.is-checked`/`.is-tier-*` sao aplicadas por JS (checkable.js,
+   area_tiers.js) -- estado explicito, inspecionavel no DevTools e sem
+   depender de suporte a :has(). */
+.lb-area-card.is-checked { border-color: var(--neon); background: var(--surface-2); box-shadow: 0 0 12px var(--neon-glow); }
 .lb-area-card__icon { font-size: 22px; color: var(--chrome-bright); }
-.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__icon { color: var(--neon-bright); }
+.lb-area-card.is-checked .lb-area-card__icon { color: var(--neon-bright); }
 .lb-area-card__label { font-weight: 500; font-size: 13.5px; text-align: center; }
 
 /* ---- prioridade da área (objetivo principal/secundária/plano de fundo) ---- */
@@ -196,7 +199,7 @@ input:focus, select:focus, textarea:focus, button:focus {
     background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--line);
     opacity: 0; transition: opacity .15s ease;
 }
-.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-card__tier-tag { opacity: 1; }
+.lb-area-card.is-checked .lb-area-card__tier-tag { opacity: 1; }
 
 /* O espaco do seletor de prioridade fica sempre reservado (visibility/opacity
    em vez de display:none) -- assim todo card do grid mantem a mesma altura,
@@ -212,7 +215,7 @@ input:focus, select:focus, textarea:focus, button:focus {
     pointer-events: none;
     transition: opacity .15s ease;
 }
-.lb-area-card:has(.lb-area-card__hit input:checked) .lb-area-tier-picker {
+.lb-area-card.is-checked .lb-area-tier-picker {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
@@ -229,25 +232,25 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-area-tier-btn:hover { border-color: var(--chrome-bright); color: var(--text); transform: scale(1.08); }
 
 /* estado "secundária" (padrão quando marcado, cor azul já usada pelo card) */
-.lb-area-card:has(.lb-area-tier-input[value="secundario"]) { border-color: var(--neon); }
+.lb-area-card.is-tier-secundario { border-color: var(--neon); }
 .lb-area-tier-btn[data-tier="secundario"].lb-area-tier-btn--active {
     border-color: var(--neon); color: var(--neon-bright); background: var(--surface-2);
 }
 
 /* estado "plano de fundo" (discreto, cromado) */
-.lb-area-card:has(.lb-area-tier-input[value="fundo"]) { border-color: var(--line); box-shadow: none; background: var(--surface); }
-.lb-area-card:has(.lb-area-tier-input[value="fundo"]) .lb-area-card__icon { color: var(--chrome-bright); }
+.lb-area-card.is-tier-fundo { border-color: var(--line); box-shadow: none; background: var(--surface); }
+.lb-area-card.is-tier-fundo .lb-area-card__icon { color: var(--chrome-bright); }
 .lb-area-tier-btn[data-tier="fundo"].lb-area-tier-btn--active {
     border-color: var(--chrome-bright); color: var(--chrome-bright); background: var(--surface-2);
 }
 
 /* estado "principal" (destaque amarelo, sinalizado por cor + selo de texto) */
-.lb-area-card:has(.lb-area-tier-input[value="principal"]) {
+.lb-area-card.is-tier-principal {
     border-color: var(--warn); background: var(--surface-2);
     box-shadow: 0 0 14px rgba(245, 197, 66, 0.35);
 }
-.lb-area-card:has(.lb-area-tier-input[value="principal"]) .lb-area-card__icon { color: var(--warn); }
-.lb-area-card:has(.lb-area-tier-input[value="principal"]) .lb-area-card__tier-tag {
+.lb-area-card.is-tier-principal .lb-area-card__icon { color: var(--warn); }
+.lb-area-card.is-tier-principal .lb-area-card__tier-tag {
     background: rgba(245, 197, 66, 0.16); border-color: var(--warn); color: var(--warn);
 }
 .lb-area-tier-btn[data-tier="principal"].lb-area-tier-btn--active {
@@ -258,7 +261,7 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-goal-group legend { font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--chrome-bright); padding: 0 8px; text-transform: uppercase; }
 .lb-goal-options { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-start; }
 .lb-goal-option { display: flex; flex-direction: column; gap: 0; }
-.lb-goal-option:has(.lb-radio-pill input:checked) { gap: 6px; }
+.lb-goal-option.is-checked { gap: 6px; }
 .lb-goal-option__detail {
     background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
     border-radius: var(--radius); font-family: var(--font-body);
@@ -273,7 +276,7 @@ input:focus, select:focus, textarea:focus, button:focus {
     pointer-events: none;
     transition: max-height .25s ease, opacity .2s ease, padding .25s ease, border-width .15s ease;
 }
-.lb-goal-option:has(.lb-radio-pill input:checked) .lb-goal-option__detail {
+.lb-goal-option.is-checked .lb-goal-option__detail {
     max-height: 44px;
     padding: 7px 10px;
     border-width: 1px;
@@ -292,7 +295,8 @@ input:focus, select:focus, textarea:focus, button:focus {
 }
 .lb-radio-pill input { position: absolute; opacity: 0; }
 .lb-radio-pill:hover { border-color: var(--chrome-bright); }
-.lb-radio-pill:has(input:checked) { border-color: var(--neon); background: var(--surface-2); color: var(--neon-bright); box-shadow: 0 0 8px var(--neon-glow); }
+/* classe via JS (checkable.js) -- ver nota em .lb-area-card.is-checked. */
+.lb-radio-pill.is-checked { border-color: var(--neon); background: var(--surface-2); color: var(--neon-bright); box-shadow: 0 0 8px var(--neon-glow); }
 
 .lb-tag {
     font-family: var(--font-mono);
@@ -366,10 +370,13 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-build-new-form input:focus { outline: none; border-color: var(--neon); }
 
 /* ---------- DASHBOARD ---------- */
+/* As missoes sao o conteudo que o usuario abre o app pra ver todo dia, entao
+   ficam com a coluna mais larga -- antes as duas laterais (avatar + recursos)
+   somavam mais largura que o miolo, invertendo a hierarquia. */
 .lb-dashboard {
     display: grid;
-    grid-template-columns: 300px 1fr 320px;
-    gap: 22px;
+    grid-template-columns: 264px minmax(0, 1fr) 296px;
+    gap: 20px;
     align-items: start;
 }
 @media (max-width: 1050px) {
@@ -560,47 +567,61 @@ input:focus, select:focus, textarea:focus, button:focus {
     margin-bottom: 18px;
 }
 
+/* Coluna estreita (~300px): tudo aqui empilha na vertical. A versao anterior
+   punha titulo e preco lado a lado, e o chip de preco (nowrap, sem encolher)
+   comia a linha inteira -- sobravam ~46px pro titulo do livro, que quebrava
+   quase letra por letra. Numa coluna dessa largura, competir por espaco
+   horizontal nunca cabe: titulo ocupa a largura toda, o resto vira meta
+   discreta embaixo. */
 .lb-rec-card {
     border: 1px solid var(--line);
-    border-top: 2px solid var(--chrome);
     border-radius: var(--radius);
-    padding: 18px;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
     background: var(--surface-2);
+    transition: border-color .15s ease;
 }
-.lb-rec-card__title {
-    display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px; color: var(--chrome-bright);
-    text-transform: uppercase; margin: 0 0 14px;
+.lb-rec-card[open] { border-color: var(--chrome); }
+.lb-rec-card__summary {
+    display: flex; align-items: center; gap: 10px;
+    list-style: none; cursor: pointer; padding: 13px 14px;
 }
-.lb-rec-card__icon { color: var(--neon-bright); font-size: 12px; }
-.lb-rec-card__sep { color: var(--text-dim); }
+.lb-rec-card__summary::-webkit-details-marker { display: none; }
+.lb-rec-card__summary::before { content: "▸"; color: var(--text-dim); flex-shrink: 0; }
+.lb-rec-card[open] > .lb-rec-card__summary::before { content: "▾"; }
+.lb-rec-card__icon { color: var(--neon-bright); font-size: 13px; flex-shrink: 0; }
+.lb-rec-card__labels { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lb-rec-card__area {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px;
+    color: var(--chrome-bright); text-transform: uppercase;
+}
+.lb-rec-card__goal { font-size: 12.5px; color: var(--text); line-height: 1.3; }
+.lb-rec-card__body { padding: 2px 14px 16px; }
 
 .lb-rec-block { margin-bottom: 16px; }
 .lb-rec-block:last-child { margin-bottom: 0; }
 .lb-rec-block__label {
     display: block; font-size: 10px; color: var(--text-dim); text-transform: uppercase;
-    letter-spacing: 1px; font-family: var(--font-mono); margin-bottom: 8px;
+    letter-spacing: 1px; font-family: var(--font-mono); margin-bottom: 6px;
 }
 
-.lb-rec-items { display: flex; flex-direction: column; gap: 1px; }
+.lb-rec-items { display: flex; flex-direction: column; gap: 2px; }
 .lb-rec-item {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    display: flex; flex-direction: column; gap: 3px;
     padding: 8px 10px; border-radius: var(--radius); background: var(--surface);
     transition: background .15s ease;
 }
 .lb-rec-item:hover { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
-.lb-rec-item__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lb-rec-item__title { font-size: 12.5px; color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--neon-glow); }
-.lb-rec-item__title:hover { color: var(--neon-bright); }
-.lb-rec-item__meta { font-size: 11px; color: var(--text-dim); }
-.lb-rec-item__price {
-    flex-shrink: 0; font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
-    background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px;
-    white-space: nowrap;
+.lb-rec-item__title {
+    font-size: 12.5px; line-height: 1.35; color: var(--text); text-decoration: none;
+    border-bottom: 1px dotted var(--neon-glow);
+    /* titulo de livro e longo e a coluna e estreita -- distribui as linhas de
+       forma mais equilibrada em vez de deixar uma ultima linha orfa. */
+    text-wrap: pretty;
 }
+.lb-rec-item__title:hover { color: var(--neon-bright); }
+.lb-rec-item__meta { font-size: 10.5px; color: var(--text-dim); line-height: 1.3; }
 
-.lb-rec-livro { position: relative; display: inline-block; }
+.lb-rec-livro { position: relative; display: block; }
 .lb-rec-livro__popover {
     display: none;
     position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30;
@@ -623,32 +644,32 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-rec-livro__loja { font-weight: 600; color: var(--text); }
 .lb-rec-livro__preco { color: var(--text-dim); font-size: 10.5px; text-align: right; }
 
-.lb-rec-videos { display: flex; flex-direction: column; gap: 6px; }
+.lb-rec-videos { display: flex; flex-direction: column; gap: 2px; }
 .lb-rec-video {
-    display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-size: 12.5px;
-    padding: 6px; border-radius: var(--radius); transition: background .15s ease;
+    display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--text); font-size: 12px;
+    padding: 7px 10px; border-radius: var(--radius); background: var(--surface);
+    transition: background .15s ease;
 }
-.lb-rec-video:hover { background: var(--surface); }
+.lb-rec-video:hover { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
 .lb-rec-video:hover .lb-rec-video__title { color: var(--neon-bright); }
-.lb-rec-video__thumb-wrap { flex-shrink: 0; position: relative; width: 84px; height: 47px; }
 .lb-rec-video__thumb {
-    width: 84px; height: 47px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line);
-    display: block;
+    flex-shrink: 0; width: 56px; height: 32px; object-fit: cover;
+    border-radius: var(--radius); border: 1px solid var(--line); display: block;
 }
 .lb-rec-video__thumb--placeholder {
     display: flex; align-items: center; justify-content: center;
-    background: var(--surface); color: var(--chrome-bright); font-size: 14px;
+    background: var(--surface-2); color: var(--chrome); font-size: 11px;
 }
-.lb-rec-video__title { line-height: 1.35; }
+.lb-rec-video__title { line-height: 1.35; min-width: 0; }
 
-.lb-rec-block--evento a { text-decoration: none; }
 .lb-rec-evento {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--surface); transition: border-color .15s ease, background .15s ease;
+    background: var(--surface); text-decoration: none;
+    transition: border-color .15s ease, background .15s ease;
 }
 .lb-rec-evento:hover { border-color: var(--neon); background: var(--surface-2); }
-.lb-rec-evento__desc { font-size: 12.5px; color: var(--text); }
+.lb-rec-evento__desc { font-size: 12px; line-height: 1.35; color: var(--text); min-width: 0; }
 .lb-rec-evento__arrow { color: var(--neon-bright); flex-shrink: 0; }
 
 .lb-toast {
@@ -799,7 +820,7 @@ input:focus, select:focus, textarea:focus, button:focus {
     border-radius: var(--radius); padding: 14px 16px; width: 100%;
 }
 .lb-paideia-levels__label { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--chrome-bright); }
-.lb-radio-pill:has(input:checked) .lb-paideia-levels__label { color: var(--neon-bright); }
+.lb-radio-pill.is-checked .lb-paideia-levels__label { color: var(--neon-bright); }
 .lb-paideia-levels__desc { font-size: 12.5px; color: var(--text-dim); }
 
 /* ---------- NÍVEL/PRIORIDADE POR ÁREA (passo III) ---------- */

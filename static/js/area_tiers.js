@@ -36,6 +36,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return cards.some((c) => c !== exceptCard && isChecked(c) && currentTier(c) === "principal");
     }
 
+    const TIER_CLASSES = ["is-tier-principal", "is-tier-secundario", "is-tier-fundo"];
+
     function paintCard(card) {
         const tier = currentTier(card);
         const tag = card.querySelector("[data-tier-tag]");
@@ -43,10 +45,14 @@ document.addEventListener("DOMContentLoaded", () => {
         card.querySelectorAll(".lb-area-tier-btn").forEach((btn) => {
             btn.classList.toggle("lb-area-tier-btn--active", btn.dataset.tier === tier);
         });
+        // O estado visual do card vem dessa classe (ver checkable.js): o
+        // valor do input escondido continua existindo so pro submit do form.
+        TIER_CLASSES.forEach((cls) => card.classList.remove(cls));
+        if (tier) card.classList.add("is-tier-" + tier);
     }
 
-    // Mantem o atributo `value` (nao so a propriedade) em sincronia -- o CSS
-    // usa [value="..."] pra colorir o card, e atributo != propriedade em
+    // Mantem o atributo `value` (nao so a propriedade) em sincronia -- o
+    // atributo e o que vai no submit do form, e atributo != propriedade em
     // inputs assim que a gente mexe neles via JS.
     function setTier(card, tier, demoteOthers) {
         if (tier === "principal" && demoteOthers) {
@@ -83,7 +89,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         cb.addEventListener("change", () => {
-            if (cb.checked && !currentTier(card)) {
+            if (!cb.checked) {
+                // Desmarcar precisa LIMPAR a prioridade, nao so repintar --
+                // era esse o bug do card que continuava com a cor/selo de
+                // "principal" depois de desmarcado: o tier ficava salvo e o
+                // estilo seguia esse valor, nao o checkbox. Tambem evita
+                // mandar tier_<area> de uma area que o usuario nao escolheu.
+                setTier(card, "", false);
+                return;
+            }
+            if (!currentTier(card)) {
                 setTier(card, defaultTierFor(card), true);
             } else {
                 paintCard(card);
