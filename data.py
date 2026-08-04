@@ -83,10 +83,11 @@ def livro(titulo, autor, link=None, preco_nota="Ver preço atual na loja"):
 def video_busca(titulo_busca):
     """Fallback: busca no YouTube. Usado só quando não há um canal curado que
     cubra bem o tema -- link direto (ver `canal`) é sempre preferível."""
-    return {"titulo": titulo_busca, "url": youtube_search_link(titulo_busca), "thumbnail": None}
+    return {"titulo": titulo_busca, "url": youtube_search_link(titulo_busca),
+            "thumbnail": None, "busca": titulo_busca}
 
 
-def canal(handle, nome, foco):
+def canal(handle, nome, foco, busca=None):
     """Canal do YouTube real, verificado um a um (a existência de cada @handle
     foi conferida carregando a página do canal). Link DIRETO para o canal, em
     vez de jogar o usuário numa busca genérica.
@@ -100,6 +101,10 @@ def canal(handle, nome, foco):
     return {
         "titulo": nome, "url": f"https://www.youtube.com/@{handle}",
         "thumbnail": None, "tipo": "canal", "nota": foco,
+        # termo usado pra buscar um video especifico quando a YouTube Data API
+        # estiver configurada (ver youtube_api.py). Sem a API, esse campo e
+        # so ignorado e o card continua levando ao canal.
+        "busca": busca or f"{nome} {foco}",
     }
 
 

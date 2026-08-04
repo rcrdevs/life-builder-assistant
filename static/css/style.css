@@ -385,7 +385,7 @@ input:focus, select:focus, textarea:focus, button:focus {
 
 .lb-hero {
     max-width: 1180px; margin: 0 auto 20px; display: grid;
-    grid-template-columns: repeat(4, 1fr); gap: 1px;
+    grid-template-columns: repeat(5, 1fr); gap: 1px;
     background: var(--line); border: 1px solid var(--line); border-radius: var(--radius);
     overflow: hidden;
 }
@@ -397,10 +397,11 @@ input:focus, select:focus, textarea:focus, button:focus {
     color: var(--text-dim);
 }
 .lb-hero__value { font-family: var(--font-mono); font-size: 26px; color: var(--neon-bright); line-height: 1.1; }
-.lb-hero__value small { font-size: 14px; color: var(--text-dim); margin-left: 1px; }
+.lb-hero__value small { font-size: 12px; color: var(--text-dim); margin-left: 3px; }
 .lb-hero__hint { font-size: 11px; color: var(--text-dim); }
 .lb-hero__bar { height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin-top: 2px; }
 .lb-hero__bar-fill { height: 100%; background: var(--neon); box-shadow: 0 0 5px var(--neon-glow); transition: width .5s ease; }
+@media (max-width: 1050px) { .lb-hero { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 720px) { .lb-hero { grid-template-columns: repeat(2, 1fr); } }
 
 .lb-panel {
@@ -1016,11 +1017,51 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-guest-banner p { margin: 0; color: var(--text-dim); line-height: 1.5; max-width: 620px; }
 .lb-guest-banner__actions { display: flex; gap: 8px; flex-shrink: 0; }
 
+/* Prova da semana -- mesmo formato do banner de convidado, mas em azul (acao
+   disponivel) ou verde (ja respondida), pra nao competir com o amarelo de
+   aviso. */
+.lb-exam-banner {
+    max-width: 1180px; margin: 0 auto 20px; padding: 16px 20px;
+    border: 1px solid var(--neon); border-radius: var(--radius);
+    background: var(--surface); box-shadow: 0 0 12px var(--neon-glow);
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    font-size: 13.5px;
+}
+.lb-exam-banner p { margin: 0; color: var(--text-dim); line-height: 1.5; max-width: 620px; }
+.lb-exam-banner__title {
+    margin: 0 0 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--neon-bright);
+}
+.lb-exam-banner--done { border-color: var(--ok); box-shadow: none; }
+.lb-exam-banner--done .lb-exam-banner__title { color: var(--ok); }
+
 /* ---------- QUIZ IN-APP ---------- */
 .lb-quiz-question { margin-bottom: 4px; }
 .lb-quiz-question__text { font-size: 14.5px; margin: 4px 0 12px; }
 .lb-quiz-question__options { display: flex; flex-direction: column; gap: 8px; }
 .lb-quiz-question__fonte { margin-top: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); }
+
+/* Aviso de origem das questoes -- precisa ser obvio. Quando a IA falha o app
+   cai no banco estatico generico, e sem um aviso destacado isso parecia
+   "questoes aleatorias" (foi exatamente o que aconteceu quando a conta da
+   DeepSeek ficou sem saldo). */
+.lb-quiz-banner {
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+    border: 1px solid var(--line); border-left: 3px solid var(--line);
+    border-radius: var(--radius); background: var(--surface-2);
+    padding: 14px 16px; margin: 0 0 24px; max-width: 720px;
+}
+.lb-quiz-banner p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-dim); }
+.lb-quiz-banner strong { color: var(--text); }
+.lb-quiz-banner__tag {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+}
+.lb-quiz-banner--ok { border-left-color: var(--ok); }
+.lb-quiz-banner--ok .lb-quiz-banner__tag { color: var(--ok); }
+.lb-quiz-banner--generico { border-left-color: var(--warn); }
+.lb-quiz-banner--generico .lb-quiz-banner__tag { color: var(--warn); }
+.lb-quiz-banner form { margin: 0; }
+.lb-quiz-banner .lb-btn { align-self: auto; }
 
 .lb-quiz-review { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
 .lb-quiz-review__item {
@@ -1300,13 +1341,16 @@ input:focus, select:focus, textarea:focus, button:focus {
    sem isso o .lb-btn base (align-self: flex-start) desalinhava a fileira. */
 .lb-con-actions .lb-btn { align-self: auto; }
 
-.lb-con-write { display: flex; gap: 8px; margin-top: 6px; }
+/* campo e botao empilhados: o campo ocupa a largura toda e o "Confirmar" fica
+   embaixo, centralizado -- ao lado ele espremia o input e desalinhava com as
+   fileiras de opcoes/acoes, que tambem sao centradas. */
+.lb-con-write { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .lb-con-write__input {
-    flex: 1; min-width: 0;
+    width: 100%; min-width: 0;
     background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
     padding: 11px 13px; border-radius: var(--radius); font-family: var(--font-body); font-size: 14px;
 }
-.lb-con-write .lb-btn { align-self: auto; flex-shrink: 0; }
+.lb-con-write .lb-btn { align-self: center; }
 .lb-con-form { display: none; }
 
 @media (max-width: 640px) {

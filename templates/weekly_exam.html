@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Prova da semana{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Voltar</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Prova da semana</p>
+    <h1 class="lb-title lb-title--md">O que você estudou nesta semana</h1>
+
+    <div class="lb-quiz-banner lb-quiz-banner--ok">
+        <span class="lb-quiz-banner__tag">Montada a partir do seu progresso</span>
+        <p>
+            Estas questões saíram do que <strong>você marcou como feito</strong> nos últimos dias —
+            não de um banco genérico.
+            {% if temas %}Assuntos cobrados: {{ temas|join(' · ') }}.{% endif %}
+        </p>
+    </div>
+
+    {% if ja_respondida %}
+    <p class="lb-lede">Você já respondeu a prova desta semana — sua nota foi
+        <strong>{{ exam.score|round }}%</strong>. A próxima é gerada na semana que vem, com o
+        conteúdo que você estudar até lá.</p>
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">← Voltar ao painel</a>
+    {% else %}
+    <form method="post" action="{{ url_for('weekly_exam') }}" class="lb-form">
+        {% for q in questions %}
+        {% set qidx = loop.index0 %}
+        <fieldset class="lb-goal-group lb-quiz-question">
+            <legend>Questão {{ loop.index }}</legend>
+            <p class="lb-quiz-question__text">{{ q.pergunta }}</p>
+            <div class="lb-quiz-question__options">
+                {% for alt in q.alternativas %}
+                <label class="lb-radio-pill lb-radio-pill--block">
+                    <input type="radio" name="q{{ qidx }}" value="{{ loop.index0 }}" required>
+                    <span>{{ alt }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="lb-quiz-question__fonte">{{ q.fonte }}</p>
+        </fieldset>
+        {% endfor %}
+        <button type="submit" class="lb-btn lb-btn--primary">Entregar prova →</button>
+    </form>
+    {% endif %}
+</section>
+{% endblock %}

@@ -68,6 +68,9 @@
 
         <div class="lb-form-actions">
             <a href="{{ url_for('step_info') }}" class="lb-btn lb-btn--ghost">← Voltar</a>
+            {% if user.onboarding_complete %}
+            <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">Cancelar</a>
+            {% endif %}
             <button type="submit" class="lb-btn lb-btn--primary">
                 {{ "Salvar alterações →" if user.onboarding_complete else "Gerar meu Life Build →" }}
             </button>

@@ -1,4 +1,10 @@
 <div class="lb-header-actions">
+    {# Editando uma build que ja existe (veio do "Editar build" no painel):
+       precisa de uma saida sem salvar. No onboarding inicial nao ha o que
+       cancelar -- ainda nao existe build pra voltar. #}
+    {% if user and user.onboarding_complete %}
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Cancelar edição</a>
+    {% endif %}
     <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Sair</a>
 </div>
 <div class="lb-steps">

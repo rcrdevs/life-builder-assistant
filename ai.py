@@ -17,9 +17,52 @@ import urllib.request
 import urllib.error
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 TIMEOUT_SECONDS = 12
+
+# ATENCAO -- nao remova o User-Agent das chamadas abaixo.
+# A Groq fica atras da Cloudflare, que BLOQUEIA o User-Agent padrao do urllib
+# ("Python-urllib/3.x") com HTTP 403 "error code: 1010". Sem esse header
+# nenhuma chamada a Groq funciona -- e como o app engole falhas de IA em
+# silencio (de proposito, pra nunca travar o usuario), o sintoma era a nota de
+# estrategia simplesmente nunca aparecer, sem erro visivel em lugar nenhum.
+# Verificado na marra: mesma requisicao, mesma chave -- sem UA da 403, com UA
+# responde 200.
+HTTP_HEADERS_BASE = {
+    "Content-Type": "application/json",
+    "User-Agent": "LifeBuilder/1.0 (+https://github.com/rcrdevs/life-builder-assistant)",
+}
+
+
+def _auth_headers(api_key):
+    return dict(HTTP_HEADERS_BASE, Authorization=f"Bearer {api_key}")
+
+
+def _post_json(url, api_key, payload, timeout):
+    """POST JSON e devolve o dict da resposta, ou None se falhar por qualquer
+    motivo (rede, HTTP, JSON invalido). Nunca levanta: toda funcionalidade de
+    IA aqui e opcional e cai em fallback silencioso."""
+    req = urllib.request.Request(
+        url, data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers=_auth_headers(api_key),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # 402 (saldo esgotado) e 401 (chave invalida) sao os casos que mais
+        # aparecem na pratica -- logar ajuda a diferenciar "sem chave" de
+        # "chave existe mas o provedor recusou", que antes eram indistinguiveis.
+        try:
+            detalhe = e.read().decode("utf-8")[:200]
+        except Exception:
+            detalhe = ""
+        print(f"[ai] {url} respondeu HTTP {e.code}: {detalhe}")
+        return None
+    except (urllib.error.URLError, ValueError, TimeoutError) as e:
+        print(f"[ai] falha ao chamar {url}: {e!r}")
+        return None
 # 260 chegava pra 1 paragrafo generico; agora a nota tem 1 entrada curta por
 # area ativa (ate 4 areas) dentro de um JSON, entao precisa de um pouco mais
 # de espaco -- ainda uma fracao de centavo por chamada no preco da Groq.
@@ -43,86 +86,133 @@ DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
 QUIZ_TIMEOUT_SECONDS = 25
 QUIZ_MAX_TOKENS = 2200
 
+# Regras 1 e 2 existem por um motivo concreto: pedindo so "questoes especificas
+# do tema", um tema como "TI da Caixa Economica Federal" fazia o modelo inventar
+# trivia institucional ("qual banco de dados a Caixa usa?"), que nao e
+# verificavel, nao cai em prova e soa como questao aleatoria. O que o usuario
+# quer sao as MATERIAS do edital daquele cargo.
 QUIZ_SYSTEM_PROMPT = (
-    "Voce cria questoes de multipla escolha para um app de estudos, em portugues "
-    "do Brasil. Gere questoes originais (nunca copiadas de uma prova real), "
-    "tecnicamente corretas e especificas do tema pedido -- nada generico. "
+    "Voce elabora questoes de multipla escolha para um app de estudos, em "
+    "portugues do Brasil.\n"
+    "REGRAS:\n"
+    "1. As questoes devem cobrar CONHECIMENTO TECNICO/ACADEMICO que cai na prova "
+    "do tema -- conceitos, definicoes, legislacao, formulas, boas praticas. "
+    "NUNCA pergunte sobre fatos internos de uma instituicao (qual sistema, "
+    "fornecedor ou ferramenta uma empresa usa): isso nao e verificavel e nao "
+    "cai em prova.\n"
+    "2. Se o tema citar uma instituicao, banca ou cargo, use isso APENAS para "
+    "escolher as materias do edital. NAO cite o nome da instituicao no enunciado "
+    "das questoes -- pergunte sobre o conceito em si. Ex.: para 'TI da Caixa', "
+    "pergunte 'O que garante a propriedade de atomicidade em uma transacao de "
+    "banco de dados?', e NAO 'Qual a funcao do banco de dados da Caixa?'.\n"
+    "3. Varie os assuntos: nao repita a mesma materia em duas questoes seguidas.\n"
+    "4. Cada questao precisa ter uma unica alternativa correta, objetivamente "
+    "verificavel, e 3 alternativas erradas plausiveis.\n"
+    "5. Questoes originais -- nunca copiadas literalmente de uma prova real.\n"
     "Responda APENAS com um JSON valido (sem markdown, sem texto fora do JSON): "
-    "uma lista de objetos, cada um com as chaves: "
-    '"pergunta" (string), "alternativas" (lista de exatamente 4 strings), '
-    '"correta" (indice 0-3 da alternativa correta), '
-    '"fonte" (sempre a string fixa "Questão-modelo gerada por IA para este tema").'
+    '{"questoes": [{"pergunta": string, "alternativas": [4 strings], '
+    '"correta": indice 0-3, "fonte": "materia/assunto da questao"}]}'
 )
 
 
 def quiz_ai_available():
-    return bool(DEEPSEEK_API_KEY)
+    """Quiz por IA funciona com QUALQUER um dos dois provedores configurados --
+    ver generate_quiz_questions para a ordem de tentativa."""
+    return bool(DEEPSEEK_API_KEY or GROQ_API_KEY)
 
 
-def generate_quiz_questions(topic, n=10):
-    """Gera `n` questoes de multipla escolha sobre `topic` via DeepSeek.
-    Retorna uma tupla (questions, usage): `questions` e uma lista de dicts no
-    formato do QUIZ_BANK estatico, ou None se a IA nao estiver configurada /
-    a chamada falhar / a resposta nao vier em JSON valido -- nesses casos
-    quem chamou deve cair para um fallback. `usage` e o dict de tokens
-    devolvido pela API (prompt_tokens/completion_tokens/total_tokens), ou
-    None se a chamada nao chegou a acontecer/retornar."""
-    if not DEEPSEEK_API_KEY or not topic:
-        return None, None
-
-    user_prompt = f"Tema: {topic}\nGere {n} questões de múltipla escolha sobre esse tema, com dificuldade variada."
-    body = json.dumps({
-        "model": DEEPSEEK_MODEL,
-        "messages": [
-            {"role": "system", "content": QUIZ_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        "max_tokens": QUIZ_MAX_TOKENS,
-        "temperature": 0.7,
-        "response_format": {"type": "json_object"},
-        # desliga o modo "thinking" do deepseek-v4-flash: queremos a resposta
-        # JSON direto, sem tokens de raciocinio extra (mais rapido e mais
-        # barato -- e o equivalente ao comportamento do antigo deepseek-chat).
-        "thinking": {"type": "disabled"},
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        DEEPSEEK_URL, data=body, method="POST",
-        headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-    )
-    usage = None
+def _parse_quiz_response(data):
+    """Extrai e valida a lista de questoes da resposta da API. Descarta
+    qualquer questao malformada em vez de confiar cegamente no modelo."""
     try:
-        with urllib.request.urlopen(req, timeout=QUIZ_TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        usage = data.get("usage")
         raw = data["choices"][0]["message"]["content"].strip()
         parsed = json.loads(raw)
-        # aceita tanto uma lista direta quanto {"questoes": [...]} / {"perguntas": [...]}
-        if isinstance(parsed, dict):
-            for key in ("questoes", "perguntas", "questions", "items"):
-                if key in parsed and isinstance(parsed[key], list):
-                    parsed = parsed[key]
-                    break
-        if not isinstance(parsed, list):
-            return None, usage
+    except (KeyError, IndexError, ValueError, TypeError):
+        return None
 
-        questions = []
-        for q in parsed:
-            alternativas = q.get("alternativas")
-            correta = q.get("correta")
-            pergunta = q.get("pergunta")
-            if not pergunta or not isinstance(alternativas, list) or len(alternativas) != 4:
-                continue
-            if not isinstance(correta, int) or not (0 <= correta <= 3):
-                continue
-            questions.append({
-                "pergunta": pergunta, "alternativas": alternativas, "correta": correta,
-                "fonte": q.get("fonte") or "Questão-modelo gerada por IA para este tema",
-            })
-        return (questions or None), usage
-    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
-            ValueError, TimeoutError, TypeError):
-        return None, usage
+    # aceita lista direta ou {"questoes": [...]} / {"perguntas": [...]}
+    if isinstance(parsed, dict):
+        for key in ("questoes", "perguntas", "questions", "items"):
+            if isinstance(parsed.get(key), list):
+                parsed = parsed[key]
+                break
+    if not isinstance(parsed, list):
+        return None
+
+    questions = []
+    for q in parsed:
+        if not isinstance(q, dict):
+            continue
+        alternativas, correta, pergunta = q.get("alternativas"), q.get("correta"), q.get("pergunta")
+        if not pergunta or not isinstance(alternativas, list) or len(alternativas) != 4:
+            continue
+        if not isinstance(correta, int) or not (0 <= correta <= 3):
+            continue
+        questions.append({
+            "pergunta": pergunta, "alternativas": alternativas, "correta": correta,
+            "fonte": q.get("fonte") or "Questão gerada por IA para este tema",
+        })
+    return questions or None
+
+
+def generate_quiz_questions(topic, n=10, extra_instrucao=None):
+    """Gera `n` questoes de multipla escolha sobre `topic`.
+
+    Tenta a DeepSeek primeiro (camada gratuita mais generosa pra JSON grande) e
+    cai pra Groq se ela falhar. Esse fallback existe porque falha de provedor
+    aconteceu de verdade em producao: a conta DeepSeek ficou sem saldo (HTTP 402)
+    e, como o app engole erro de IA em silencio, TODO quiz passou a cair no banco
+    estatico generico -- o usuario digitava "TI da Caixa" e recebia questoes
+    aleatorias de portugues e direito constitucional, sem nenhum aviso.
+
+    Retorna (questions, usage, provedor). `questions` e None se nenhum provedor
+    respondeu -- ai quem chamou deve usar o banco estatico.
+    """
+    if not topic:
+        return None, None, None
+
+    user_prompt = (
+        f"Tema: {topic}\n"
+        f"Gere {n} questões de múltipla escolha sobre esse tema, com dificuldade variada."
+    )
+    if extra_instrucao:
+        user_prompt += f"\n{extra_instrucao}"
+    messages = [
+        {"role": "system", "content": QUIZ_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    tentativas = []
+    if DEEPSEEK_API_KEY:
+        tentativas.append(("deepseek", DEEPSEEK_URL, DEEPSEEK_API_KEY, {
+            "model": DEEPSEEK_MODEL, "messages": messages,
+            "max_tokens": QUIZ_MAX_TOKENS, "temperature": 0.6,
+            "response_format": {"type": "json_object"},
+            # sem tokens de raciocinio extra: queremos o JSON direto
+            "thinking": {"type": "disabled"},
+        }))
+    if GROQ_API_KEY:
+        tentativas.append(("groq", GROQ_URL, GROQ_API_KEY, {
+            "model": GROQ_MODEL, "messages": messages,
+            "max_tokens": QUIZ_MAX_TOKENS, "temperature": 0.6,
+            "response_format": {"type": "json_object"},
+        }))
+
+    for provedor, url, chave, payload in tentativas:
+        data = _post_json(url, chave, payload, QUIZ_TIMEOUT_SECONDS)
+        if data is None:
+            continue
+        questions = _parse_quiz_response(data)
+        if questions:
+            return questions, data.get("usage"), provedor
+        print(f"[ai] {provedor} respondeu, mas sem questoes validas -- tentando o proximo provedor")
+
+    return None, None, None
+
+
+def quiz_model_for(provedor):
+    """Nome do modelo usado por provedor -- pro registro de consumo de tokens."""
+    return DEEPSEEK_MODEL if provedor == "deepseek" else GROQ_MODEL
 
 # Nota de estrategia: 1 chamada Groq por ciclo (14 dias) por conta -- nunca por
 # missao/dia. Para dar a sensacao real de "IA que acompanha a evolucao" sem
@@ -222,7 +312,7 @@ def generate_strategy_note(profile_summary, area_keys):
     if not GROQ_API_KEY or not profile_summary or not area_keys:
         return None, None
 
-    body = json.dumps({
+    data = _post_json(GROQ_URL, GROQ_API_KEY, {
         "model": GROQ_MODEL,
         "messages": [
             {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
@@ -231,17 +321,12 @@ def generate_strategy_note(profile_summary, area_keys):
         "max_tokens": MAX_TOKENS,
         "temperature": 0.6,
         "response_format": {"type": "json_object"},
-    }).encode("utf-8")
+    }, TIMEOUT_SECONDS)
+    if data is None:
+        return None, None
 
-    req = urllib.request.Request(
-        GROQ_URL, data=body, method="POST",
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-    )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        raw = data["choices"][0]["message"]["content"].strip()
-        parsed = json.loads(raw)
+        parsed = json.loads(data["choices"][0]["message"]["content"].strip())
         if not isinstance(parsed, dict):
             return None, data.get("usage")
         notes = {
@@ -249,6 +334,5 @@ def generate_strategy_note(profile_summary, area_keys):
             if k in area_keys and isinstance(v, str) and v.strip()
         }
         return (notes or None), data.get("usage")
-    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
-            ValueError, TimeoutError, TypeError, AttributeError):
-        return None, None
+    except (KeyError, IndexError, ValueError, TypeError, AttributeError):
+        return None, data.get("usage")

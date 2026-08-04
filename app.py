@@ -42,6 +42,7 @@ import ai_billing
 import billing
 import email_sender
 import jobs
+import youtube_api
 from ai_billing import FREE_TRIAL_AI_TOKENS
 
 try:
@@ -301,6 +302,27 @@ def init_db():
         source VARCHAR(32),
         questions TEXT,
         created_at VARCHAR(32)
+    );
+    CREATE TABLE IF NOT EXISTS weekly_exams (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(36),
+        week_start VARCHAR(32),
+        source VARCHAR(32),
+        temas TEXT,
+        questions TEXT,
+        score DOUBLE PRECISION,
+        answered_at VARCHAR(32),
+        created_at VARCHAR(32),
+        UNIQUE (user_id, week_start)
+    );
+    CREATE TABLE IF NOT EXISTS youtube_cache (
+        query VARCHAR(255) PRIMARY KEY,
+        video_id VARCHAR(32),
+        titulo TEXT,
+        canal VARCHAR(255),
+        thumbnail TEXT,
+        url TEXT,
+        fetched_at VARCHAR(32)
     );
     CREATE TABLE IF NOT EXISTS jobs (
         id SERIAL PRIMARY KEY,
@@ -1595,8 +1617,11 @@ def dashboard():
         (user["id"], user["current_cycle"]),
     ).fetchone()["c"]
 
-    # progresso semanal para o hero do dashboard: % de missoes registradas
-    # nos ultimos 7 dias (rotina fora -- e sempre a mesma, nao mede objetivo).
+    # Numeros do hero. "Registrada" (completion_pct IS NOT NULL) e diferente de
+    # "concluida 100%": o usuario registra com um slider, entao uma missao pode
+    # valer 40%. Por isso o card Total mostra as duas coisas -- quantas missoes
+    # foram registradas e a media de quao completas elas ficaram.
+    # Rotina fica de fora dos percentuais: e sempre a mesma e nao mede objetivo.
     week_start = (today - timedelta(days=6)).isoformat()
     week_row = db.execute(
         "SELECT COUNT(*) total, SUM(CASE WHEN completion_pct IS NOT NULL THEN 1 ELSE 0 END) logged "
@@ -1604,6 +1629,21 @@ def dashboard():
         (user["id"], week_start, today_iso),
     ).fetchone()
     week_completion_pct = round(100 * week_row["logged"] / week_row["total"]) if week_row["total"] else 0
+
+    day_row = db.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN completion_pct IS NOT NULL THEN 1 ELSE 0 END) logged "
+        "FROM missions WHERE user_id=? AND date=? AND area != 'rotina'",
+        (user["id"], today_iso),
+    ).fetchone()
+    day_completion_pct = round(100 * day_row["logged"] / day_row["total"]) if day_row["total"] else 0
+
+    total_row = db.execute(
+        "SELECT COUNT(*) feitas, AVG(completion_pct) media FROM missions "
+        "WHERE user_id=? AND completion_pct IS NOT NULL AND area != 'rotina'",
+        (user["id"],),
+    ).fetchone()
+    total_missoes_feitas = total_row["feitas"] or 0
+    total_media_pct = round(total_row["media"]) if total_row["media"] is not None else 0
 
     goal_progress_rows = db.execute(
         "SELECT * FROM goal_progress WHERE user_id=? ORDER BY area", (user["id"],)
@@ -1617,6 +1657,7 @@ def dashboard():
         if not rec:
             label = user["custom_goal_labels"].get(f"{area}:{gk}") or user["custom_area_labels"].get(area) or gk
             rec = generic_recommendation(label)
+        rec = json.loads(json.dumps(rec))  # copia: _attach_youtube_videos altera in-place
         recs.append({
             "area": area,
             "area_label": area_label(user, area),
@@ -1651,6 +1692,9 @@ def dashboard():
     for m in missions_today:
         missions_by_area.setdefault(m["area"], []).append(m)
 
+    _attach_youtube_videos(db, recs)
+    prova_semanal = _weekly_exam_for(db, user)
+
     level, xp_in_level, xp_to_next = xp_level_progress(user["vitality_points_accum"] or 0)
     show_profile_prompt = (
         user["extra_info"].get("onboarding_mode") == "quick"
@@ -1665,6 +1709,10 @@ def dashboard():
         total_missions=total_missions,
         logged_missions=logged_missions,
         week_completion_pct=week_completion_pct,
+        day_completion_pct=day_completion_pct,
+        total_missoes_feitas=total_missoes_feitas,
+        total_media_pct=total_media_pct,
+        prova_semanal=prova_semanal,
         show_profile_prompt=show_profile_prompt,
         level=level,
         xp_in_level=round(xp_in_level),
@@ -1846,6 +1894,236 @@ def _quiz_topic_for(user, mission):
     return f"{area_lbl} / {goal_lbl}"
 
 
+# ---------------------------------------------------------------------------
+# Prova da semana: toda semana o app olha o que o usuario marcou como feito e
+# monta uma prova em cima DESSE conteudo -- nao de um banco fixo. E o fecho do
+# ciclo "estudou -> foi cobrado do que estudou".
+# ---------------------------------------------------------------------------
+WEEKLY_EXAM_QUESTIONS = 8
+WEEKLY_EXAM_MIN_MISSIONS = 3   # abaixo disso nao ha material suficiente pra cobrar
+# So areas de CONHECIMENTO entram na prova. Testado na pratica: incluir Saude e
+# Espiritualidade produzia questoes sem valor ("qual o conceito de circuito
+# funcional?") e o modelo ainda tentava dissertar sobre "Paideia", que e
+# vocabulario interno do produto, nao materia de prova. Treino e pratica
+# espiritual se acompanham pela adesao das missoes, nao por prova escrita.
+WEEKLY_EXAM_AREAS = ("profissional", "estudos")
+
+
+def _week_start_for(day):
+    """Segunda-feira da semana de `day` -- chave estavel pra uma prova por semana."""
+    return day - timedelta(days=day.weekday())
+
+
+def _weekly_exam_material(db, user_id, week_start):
+    """Missoes que o usuario efetivamente registrou na semana e que representam
+    conteudo estudavel. Rotina e dieta ficam de fora: sao habito, nao materia.
+    Missoes abandonadas (0%) tambem -- nao daria pra cobrar o que nao foi feito."""
+    areas = ",".join(["?"] * len(WEEKLY_EXAM_AREAS))
+    rows = db.execute(
+        "SELECT area, goal, description, AVG(completion_pct) media, COUNT(*) vezes "
+        "FROM missions WHERE user_id=? AND date>=? AND date<=? "
+        "AND completion_pct IS NOT NULL AND completion_pct > 0 "
+        f"AND area IN ({areas}) AND goal != 'dieta' "
+        "GROUP BY area, goal, description ORDER BY vezes DESC, media DESC",
+        (user_id, week_start.isoformat(), (week_start + timedelta(days=6)).isoformat())
+        + tuple(WEEKLY_EXAM_AREAS),
+    ).fetchall()
+    return rows
+
+
+def _run_weekly_exam_job(db, payload):
+    """Handler do job 'weekly_exam'. Monta o tema a partir das missoes feitas na
+    semana e pede a prova a IA; sem IA disponivel, nao inventa prova generica --
+    simplesmente nao cria (o card so aparece quando ha prova de verdade)."""
+    user_id, week_start_iso = payload["user_id"], payload["week_start"]
+    week_start = date.fromisoformat(week_start_iso)
+
+    ja_existe = db.execute(
+        "SELECT id FROM weekly_exams WHERE user_id=? AND week_start=?", (user_id, week_start_iso)
+    ).fetchone()
+    if ja_existe:
+        return
+
+    user = _load_user_row(db, user_id)
+    if user is None:
+        return
+    rows = _weekly_exam_material(db, user_id, week_start)
+    if len(rows) < WEEKLY_EXAM_MIN_MISSIONS:
+        return
+
+    account_id = user.get("account_id")
+    account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone() if account_id else None
+    if not (ai.quiz_ai_available() and ai_billing.has_quota(account)):
+        return
+
+    # O tema da prova sao as MATERIAS que a pessoa estudou -- deliberadamente
+    # sem as descricoes das missoes. As descricoes sao atividades ("fazer
+    # flashcards de um topico dificil", "ler a lei seca de um artigo"), e
+    # jogar isso no prompt levava o modelo a cobrar a atividade em vez do
+    # conteudo ("qual o objetivo de um flashcard?") ou a entender jargao ao pe
+    # da letra ("lei seca" virou a lei de transito). O que identifica a materia
+    # e o objetivo + o detalhe/direcionamento que o usuario deu ao Con.
+    por_objetivo = {}
+    for r in rows:
+        por_objetivo[(r["area"], r["goal"])] = por_objetivo.get((r["area"], r["goal"]), 0) + r["vezes"]
+
+    temas, linhas = [], []
+    for (area, goal), vezes in sorted(por_objetivo.items(), key=lambda kv: -kv[1]):
+        chave = f"{area}:{goal}"
+        detalhe = (user.get("goal_details") or {}).get(chave)
+        direcao = (user["extra_info"].get("goal_directions") or {}).get(chave)
+        rotulo = goal_label(user, area, goal)
+        contexto = f"{rotulo} ({detalhe or direcao})" if (detalhe or direcao) else rotulo
+        temas.append(contexto)
+        linhas.append(f"- {contexto} — {vezes} sessões de estudo/prática nesta semana")
+
+    # O `topic` carrega SO a materia -- ele entra no prompt como "Tema: {topic}",
+    # entao qualquer enquadramento ali ("revisao semanal", "o usuario estudou...")
+    # acaba virando o assunto das questoes: numa rodada de teste o modelo gerou
+    # 8 questoes sobre "o que e uma revisao semanal". O enquadramento vai todo
+    # em extra_instrucao, que o prompt trata como instrucao, nao como tema.
+    topico = "; ".join(temas)
+    questions, usage, provedor = ai.generate_quiz_questions(
+        topico, n=WEEKLY_EXAM_QUESTIONS,
+        extra_instrucao=(
+            "Contexto: prova de revisao do que o usuario estudou na semana -- "
+            + "; ".join(linhas)
+            + ". Cobre o CONTEUDO dessas materias (conceitos, definicoes, "
+            "legislacao, tecnica). Nunca pergunte sobre metodo de estudo, "
+            "rotina, revisao ou sobre as proprias sessoes de pratica."
+        ),
+    )
+    if usage and provedor:
+        ai_billing.record_usage(db, account_id, user_id, provedor,
+                                ai.quiz_model_for(provedor), "weekly_exam", usage)
+    if not questions:
+        return
+
+    db.execute(
+        "INSERT INTO weekly_exams (user_id, week_start, source, temas, questions, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, week_start) DO NOTHING",
+        (user_id, week_start_iso, provedor, json.dumps(temas),
+         json.dumps(questions), datetime.now().isoformat()),
+    )
+    db.commit()
+
+
+def _weekly_exam_for(db, user):
+    """Prova da semana atual, se ja existir. Se nao existir e houver material
+    suficiente, enfileira a geracao (dedupe por semana) e devolve None -- o
+    card so aparece quando a prova estiver pronta de verdade."""
+    if session.get("is_guest"):
+        return None
+    week_start = _week_start_for(date.today())
+    row = db.execute(
+        "SELECT * FROM weekly_exams WHERE user_id=? AND week_start=?",
+        (user["id"], week_start.isoformat()),
+    ).fetchone()
+    if row:
+        return row
+    if len(_weekly_exam_material(db, user["id"], week_start)) >= WEEKLY_EXAM_MIN_MISSIONS:
+        jobs.enqueue(
+            db, "weekly_exam", {"user_id": user["id"], "week_start": week_start.isoformat()},
+            dedupe_key=f"exam:{user['id']}:{week_start.isoformat()}",
+        )
+    return None
+
+
+@app.route("/prova-semanal", methods=["GET", "POST"])
+@guest_allowed
+def weekly_exam():
+    db = get_db()
+    user = get_user()
+    week_start = _week_start_for(date.today())
+    row = db.execute(
+        "SELECT * FROM weekly_exams WHERE user_id=? AND week_start=?",
+        (user["id"], week_start.isoformat()),
+    ).fetchone()
+    if row is None:
+        return redirect(url_for("dashboard"))
+
+    questions = json.loads(row["questions"])
+    temas = json.loads(row["temas"] or "[]")
+
+    if request.method == "GET" or row["answered_at"]:
+        return render_template("weekly_exam.html", user=user, questions=questions, temas=temas,
+                                exam=row, ja_respondida=bool(row["answered_at"]))
+
+    answers = []
+    for i in range(len(questions)):
+        val = request.form.get(f"q{i}")
+        answers.append(int(val) if val is not None and val.isdigit() else -1)
+    acertos, total, pct, detalhe = grade_quiz(questions, answers)
+    db.execute(
+        "UPDATE weekly_exams SET score=?, answered_at=? WHERE id=?",
+        (pct, datetime.now().isoformat(), row["id"]),
+    )
+    db.commit()
+    return render_template("weekly_exam_result.html", user=user, acertos=acertos, total=total,
+                            pct=pct, detalhe=detalhe, temas=temas)
+
+
+def _attach_youtube_videos(db, recs):
+    """Troca os cards de canal/busca por VIDEOS reais quando a YouTube Data API
+    estiver configurada e o resultado ja estiver em cache.
+
+    Nada aqui chama a API no caminho da requisicao: so le o cache e, para o
+    que faltar, enfileira um job (dedupe por termo, entao recarregar a pagina
+    nao multiplica chamadas). Enquanto o job nao roda, o card continua sendo o
+    canal verificado -- ou seja, a pagina nunca fica pior do que era sem a API.
+    """
+    if not youtube_api.youtube_available():
+        return
+
+    termos = sorted({
+        c["busca"] for rec in recs for c in rec.get("conteudo", []) if c.get("busca")
+    })
+    if not termos:
+        return
+
+    placeholders = ",".join(["?"] * len(termos))
+    rows = db.execute(
+        f"SELECT * FROM youtube_cache WHERE query IN ({placeholders})", tuple(termos)
+    ).fetchall()
+    cache = {r["query"]: r for r in rows}
+
+    limite = (datetime.now() - timedelta(days=youtube_api.CACHE_TTL_DAYS)).isoformat()
+    for termo in termos:
+        row = cache.get(termo)
+        if row is None or (row["fetched_at"] or "") < limite:
+            jobs.enqueue(db, "youtube_fetch", {"query": termo}, dedupe_key=f"yt:{termo}")
+
+    for rec in recs:
+        for c in rec.get("conteudo", []):
+            row = cache.get(c.get("busca"))
+            if not row or not row["video_id"]:
+                continue
+            c.update({
+                "titulo": row["titulo"], "url": row["url"], "thumbnail": row["thumbnail"],
+                "tipo": "video", "nota": row["canal"],
+            })
+
+
+def _run_youtube_fetch_job(db, payload):
+    """Handler do job 'youtube_fetch' -- busca um video real e guarda no cache."""
+    query = payload.get("query")
+    if not query:
+        return
+    video = youtube_api.search_video(query)
+    if not video:
+        return
+    db.execute(
+        "INSERT INTO youtube_cache (query, video_id, titulo, canal, thumbnail, url, fetched_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT (query) DO UPDATE SET video_id=EXCLUDED.video_id, titulo=EXCLUDED.titulo, "
+        "canal=EXCLUDED.canal, thumbnail=EXCLUDED.thumbnail, url=EXCLUDED.url, "
+        "fetched_at=EXCLUDED.fetched_at",
+        (query, video["video_id"], video["titulo"], video["canal"], video["thumbnail"],
+         video["url"], datetime.now().isoformat()),
+    )
+    db.commit()
+
+
 def _save_quiz_cache(db, mission_id, topic, source, questions):
     if not questions:
         return
@@ -1888,16 +2166,33 @@ def _run_quiz_generate_job(db, payload):
     topic = _quiz_topic_for(user, mission)
     account_id = user.get("account_id")
     account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone() if account_id else None
-    questions, usage = (None, None)
+    questions, usage, provedor = (None, None, None)
     if ai.quiz_ai_available() and ai_billing.has_quota(account):
-        questions, usage = ai.generate_quiz_questions(topic, n=n)
-    if usage:
-        ai_billing.record_usage(db, account_id, user_id, "deepseek", ai.DEEPSEEK_MODEL, "quiz", usage)
+        questions, usage, provedor = ai.generate_quiz_questions(topic, n=n)
+    if usage and provedor:
+        ai_billing.record_usage(db, account_id, user_id, provedor, ai.quiz_model_for(provedor), "quiz", usage)
     source = "ia"
     if not questions:
         questions = pick_quiz_questions(mission["area"], mission["goal"], n=n, seed=mission_id)
         source = "banco_estatico" if questions else "indisponivel"
     _save_quiz_cache(db, mission_id, topic, source, questions)
+
+
+@app.route("/quiz/<int:mission_id>/regenerar", methods=["POST"])
+@guest_allowed
+def quiz_regenerate(mission_id):
+    """Descarta o quiz em cache e pede um novo. Existe porque o cache guarda
+    tambem os fallbacks genericos: se a IA estava fora do ar (ou sem saldo) na
+    primeira vez, o usuario ficaria preso ao banco estatico pra sempre naquela
+    missao, sem nenhuma saida pela interface."""
+    db = get_db()
+    row = db.execute(
+        "SELECT id FROM missions WHERE id=? AND user_id=?", (mission_id, session["user_id"])
+    ).fetchone()
+    if row:
+        db.execute("DELETE FROM ai_quiz_cache WHERE mission_id=?", (mission_id,))
+        db.commit()
+    return redirect(url_for("quiz", mission_id=mission_id))
 
 
 @app.route("/quiz/<int:mission_id>", methods=["GET", "POST"])
@@ -1947,11 +2242,25 @@ def quiz(mission_id):
         _save_quiz_cache(db, mission_id, _quiz_topic_for(user, mission), static_source, static_questions)
         questions, source = static_questions, static_source
 
+    detalhe_tema = (user.get("goal_details") or {}).get(f"{mission['area']}:{mission['goal']}")
+    # so oferece "gerar de novo" se a IA de fato puder responder agora -- senao
+    # o botao viraria um loop que devolve o mesmo banco estatico.
+    pode_regenerar = (
+        source == "banco_estatico"
+        and ai.quiz_ai_available() and not session.get("is_guest")
+        and ai_billing.has_quota(
+            db.execute("SELECT * FROM accounts WHERE id=?", (session.get("account_id"),)).fetchone()
+            if session.get("account_id") else None
+        )
+    )
+
     if not questions:
-        return render_template("quiz.html", mission=mission, questions=[], source=source)
+        return render_template("quiz.html", mission=mission, questions=[], source=source,
+                                detalhe_tema=detalhe_tema, pode_regenerar=False)
 
     if request.method == "GET":
-        return render_template("quiz.html", mission=mission, questions=questions, source=source)
+        return render_template("quiz.html", mission=mission, questions=questions, source=source,
+                                detalhe_tema=detalhe_tema, pode_regenerar=pode_regenerar)
 
     answers = []
     for i in range(len(questions)):
@@ -2152,6 +2461,8 @@ def _run_ai_strategy_job(db, payload):
 JOB_HANDLERS = {
     "ai_strategy": _run_ai_strategy_job,
     "quiz_generate": _run_quiz_generate_job,
+    "youtube_fetch": _run_youtube_fetch_job,
+    "weekly_exam": _run_weekly_exam_job,
 }
 
 JOB_POLL_INTERVAL_SECONDS = float(os.environ.get("JOB_POLL_INTERVAL_SECONDS", 2))

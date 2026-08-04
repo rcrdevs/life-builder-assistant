@@ -22,12 +22,14 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: llama-3.3-70b-versatile
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_MODEL
-        value: deepseek-chat
+        value: deepseek-chat  # so e usado se DEEPSEEK_API_KEY tiver saldo; senao cai pra Groq
       - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_API_KEY
         sync: false
       - key: DB_POOL_MIN
         value: "1"

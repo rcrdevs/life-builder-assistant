@@ -29,14 +29,19 @@
         <span class="lb-hero__hint">recorde: {{ longest_streak }}d</span>
     </div>
     <div class="lb-hero__item">
-        <span class="lb-hero__label">Energia</span>
-        <span class="lb-hero__value">{{ vitality_pct|round }}<small>%</small></span>
-        <span class="lb-hero__hint">vitalidade da rotina</span>
+        <span class="lb-hero__label">Dia</span>
+        <span class="lb-hero__value">{{ day_completion_pct }}<small>%</small></span>
+        <span class="lb-hero__hint">missões de hoje registradas</span>
     </div>
     <div class="lb-hero__item">
         <span class="lb-hero__label">Semana</span>
         <span class="lb-hero__value">{{ week_completion_pct }}<small>%</small></span>
-        <span class="lb-hero__hint">missões concluídas (7d)</span>
+        <span class="lb-hero__hint">missões registradas (7d)</span>
+    </div>
+    <div class="lb-hero__item">
+        <span class="lb-hero__label">Total</span>
+        <span class="lb-hero__value">{{ total_missoes_feitas }}<small>missões</small></span>
+        <span class="lb-hero__hint">{{ total_media_pct }}% de conclusão média</span>
     </div>
 </section>
 
@@ -49,6 +54,30 @@
     <div class="lb-guest-banner__actions">
         <a href="{{ url_for('register') }}" class="lb-btn lb-btn--primary lb-btn--sm">Salvar minha build →</a>
         <a href="{{ url_for('login') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Já tenho conta</a>
+    </div>
+</div>
+{% endif %}
+
+{% if prova_semanal %}
+<div class="lb-exam-banner {{ 'lb-exam-banner--done' if prova_semanal.answered_at else '' }}">
+    <div>
+        <p class="lb-exam-banner__title">
+            {% if prova_semanal.answered_at %}Prova da semana concluída — {{ prova_semanal.score|round }}%
+            {% else %}Sua prova da semana está pronta.{% endif %}
+        </p>
+        <p>
+            {% if prova_semanal.answered_at %}
+            Ela foi montada a partir do que você marcou como feito. A próxima chega na semana que vem.
+            {% else %}
+            Montada a partir do que você marcou como concluído nos últimos dias — serve pra ver o que
+            realmente ficou.
+            {% endif %}
+        </p>
+    </div>
+    <div class="lb-guest-banner__actions">
+        <a href="{{ url_for('weekly_exam') }}" class="lb-btn lb-btn--sm {{ 'lb-btn--ghost' if prova_semanal.answered_at else 'lb-btn--primary' }}">
+            {{ "Ver resultado" if prova_semanal.answered_at else "Fazer a prova →" }}
+        </a>
     </div>
 </div>
 {% endif %}
@@ -298,7 +327,11 @@
                             {% endif %}
                             <span class="lb-rec-video__body">
                                 <span class="lb-rec-video__title">{{ c.titulo }}</span>
-                                <span class="lb-rec-video__note">{{ c.nota if c.nota else 'busca no YouTube' }}</span>
+                                <span class="lb-rec-video__note">
+                                    {%- if c.tipo == 'video' %}vídeo · {{ c.nota }}
+                                    {%- elif c.nota %}canal · {{ c.nota }}
+                                    {%- else %}busca no YouTube{% endif -%}
+                                </span>
                             </span>
                         </a>
                         {% endfor %}
