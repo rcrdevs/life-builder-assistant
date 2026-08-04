@@ -139,6 +139,7 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 }
 
 .lb-error { color: var(--alert); font-size: 14px; }
+.lb-success { color: var(--ok); font-size: 14px; }
 
 .lb-area-grid {
     display: grid;
@@ -337,6 +338,26 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 @media (max-width: 1050px) {
     .lb-dashboard { grid-template-columns: 1fr; }
 }
+
+.lb-hero {
+    max-width: 1180px; margin: 0 auto 20px; display: grid;
+    grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden;
+}
+.lb-hero__item {
+    background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px;
+}
+.lb-hero__label {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim);
+}
+.lb-hero__value { font-family: var(--font-mono); font-size: 26px; color: var(--neon-bright); line-height: 1.1; }
+.lb-hero__value small { font-size: 14px; color: var(--text-dim); margin-left: 1px; }
+.lb-hero__hint { font-size: 11px; color: var(--text-dim); }
+.lb-hero__bar { height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin-top: 2px; }
+.lb-hero__bar-fill { height: 100%; background: var(--neon); box-shadow: 0 0 5px var(--neon-glow); transition: width .5s ease; }
+@media (max-width: 720px) { .lb-hero { grid-template-columns: repeat(2, 1fr); } }
 
 .lb-panel {
     background: var(--surface);
@@ -743,6 +764,9 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-auth { max-width: 420px; }
 .lb-auth__switch { font-size: 13px; color: var(--text-dim); margin-top: 18px; }
 .lb-auth__switch a { color: var(--neon-bright); }
+.lb-auth__forgot { font-size: 12.5px; margin: -8px 0 4px; text-align: right; }
+.lb-auth__forgot a { color: var(--text-dim); }
+.lb-auth__forgot a:hover { color: var(--neon-bright); }
 .lb-auth__google { display: flex; justify-content: center; margin: 4px 0 4px; }
 .lb-auth__google .lb-error { text-align: center; margin-top: 8px; }
 .lb-auth__divider {
@@ -1021,6 +1045,16 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
 .lb-build-loading__core { fill: var(--neon-bright); filter: drop-shadow(0 0 5px var(--neon-bright)); }
 
 @keyframes lb-build-spin { to { transform: rotate(360deg); } }
+
+.lb-quiz-generating { display: flex; align-items: center; gap: 12px; }
+.lb-quiz-generating__spinner {
+    flex: none; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--surface-2); border-top-color: var(--neon-bright);
+    animation: lb-build-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lb-quiz-generating__spinner { animation: none; }
+}
 
 .lb-build-loading__pct {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);

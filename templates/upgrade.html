@@ -22,38 +22,56 @@
     </div>
     {% endif %}
 
+    {% if checkout_status == "sucesso" %}
+    <p class="lb-success">Assinatura confirmada — sua cota já foi atualizada.</p>
+    {% elif checkout_status == "cancelado" %}
+    <p class="lb-hint">Checkout cancelado — nenhuma cobrança foi feita.</p>
+    {% endif %}
+
     <div class="lb-panorama-grid">
         <div class="lb-panorama-card">
             <span class="lb-panorama-card__icon">☾</span>
             <div>
-                <p class="lb-panorama-card__area">Teste grátis</p>
-                <p class="lb-panorama-card__goal">150.000 tokens, uma vez, ao criar a conta. Sem cartão, sem cobrança.</p>
+                <p class="lb-panorama-card__area">Free</p>
+                <p class="lb-panorama-card__goal">150.000 tokens de IA, uma vez, ao criar a conta. Sem cartão, sem cobrança.</p>
                 <p class="lb-panorama-card__nivel">R$ 0</p>
             </div>
         </div>
         <div class="lb-panorama-card">
             <span class="lb-panorama-card__icon">◈</span>
             <div>
-                <p class="lb-panorama-card__area">Starter</p>
-                <p class="lb-panorama-card__goal">1,5 milhão de tokens/mês — cobre uma nota de estratégia por ciclo e alguns simulados por tema, com folga.</p>
-                <p class="lb-panorama-card__nivel">R$ 14,90/mês</p>
+                <p class="lb-panorama-card__area">Pro</p>
+                <p class="lb-panorama-card__goal">Objetivos simultâneos por área, memória e revisão semanal com IA, 500 mil tokens/mês.</p>
+                <p class="lb-panorama-card__nivel">R$ 24,00/mês</p>
+                {% if billing_available %}
+                <form method="post" action="{{ url_for('billing_checkout', plan='pro') }}">
+                    <button type="submit" class="lb-btn lb-btn--primary lb-btn--sm">Assinar Pro →</button>
+                </form>
+                {% endif %}
             </div>
         </div>
         <div class="lb-panorama-card">
             <span class="lb-panorama-card__icon">✶</span>
             <div>
-                <p class="lb-panorama-card__area">Pro</p>
-                <p class="lb-panorama-card__goal">5 milhões de tokens/mês — pra quem gera muitos simulados personalizados ou mantém várias builds.</p>
-                <p class="lb-panorama-card__nivel">R$ 29,90/mês</p>
+                <p class="lb-panorama-card__area">Elite</p>
+                <p class="lb-panorama-card__goal">Cota de uso justo bem mais alta (1,5 milhão de tokens/mês), todas as integrações e suporte prioritário.</p>
+                <p class="lb-panorama-card__nivel">R$ 59,00/mês</p>
+                {% if billing_available %}
+                <form method="post" action="{{ url_for('billing_checkout', plan='elite') }}">
+                    <button type="submit" class="lb-btn lb-btn--primary lb-btn--sm">Assinar Elite →</button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </div>
 
+    {% if not billing_available %}
     <p class="lb-hint">
-        Cobrança ainda não está ativa nesta versão — esta tela é um placeholder para o fluxo de upgrade.
-        Assim que o gateway de pagamento (Stripe/Mercado Pago) for plugado, o botão de assinatura aparece
-        aqui e sua cota é renovada automaticamente todo mês.
+        Cobrança ainda não está ativa nesta versão — assinatura em breve. Assim que o gateway de pagamento
+        (Stripe) for configurado, os botões de assinatura aparecem aqui e sua cota é renovada
+        automaticamente todo mês.
     </p>
+    {% endif %}
 
     <div class="lb-form-actions">
         <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost">← Voltar ao dashboard</a>

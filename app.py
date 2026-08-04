@@ -6,6 +6,9 @@ Rode com: python app.py   e acesse http://localhost:5000
 import json
 import os
 import re
+import secrets
+import threading
+import time
 import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
@@ -16,6 +19,7 @@ load_dotenv()  # sem efeito se .env nao existir (ex: Docker, onde as variaveis j
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from flask import Flask, g, redirect, render_template, request, session, url_for, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,9 +34,13 @@ from engine import (
     blend_checkpoint_progress, bump_nivel, PROGRESS_POINT_SCALE, DEFAULT_PESO,
     AREA_TIER_WEIGHTS, AREA_TIER_LABELS,
     TOTAL_DAY_MINUTES, quiz_available, pick_quiz_questions, grade_quiz,
+    xp_level, xp_level_progress,
 )
 import ai
 import ai_billing
+import billing
+import email_sender
+import jobs
 from ai_billing import FREE_TRIAL_AI_TOKENS
 
 try:
@@ -83,6 +91,13 @@ DB_USER = os.environ.get("DB_USER", "postgres")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 DB_NAME = os.environ.get("DB_NAME", "life_builder")
 DB_SSL = os.environ.get("DB_SSL", "1") == "1"  # a Aiven (e a maioria dos free tiers) exige SSL
+# pool de conexoes para o caminho de requisicao (ver get_db()) -- sem isso,
+# cada requisicao abre uma conexao TCP+auth nova com o Postgres, o que nao
+# aguenta trafego concorrente real. min/max ajustaveis por env sem redeploy
+# de codigo; max deve ficar abaixo do limite de conexoes do plano do Postgres
+# (a maioria dos free tiers da Aiven/Render permite bem menos que 100).
+DB_POOL_MIN = int(os.environ.get("DB_POOL_MIN", 1))
+DB_POOL_MAX = int(os.environ.get("DB_POOL_MAX", 10))
 
 ALL_AREA_LABELS = {**AREAS, "rotina": ROTINA_LABEL}
 VITALITY_SCALE = 0.8
@@ -98,10 +113,16 @@ class DBWrapper:
     um cursor com .fetchone()/.fetchall(), .executescript()) por cima do
     psycopg2 -- assim as dezenas de rotas que ja usam `db.execute(...)` no
     resto do arquivo nao precisam ser reescritas uma a uma. So a camada de
-    conexao muda; o resto do codigo continua igual."""
+    conexao muda; o resto do codigo continua igual.
 
-    def __init__(self, conn):
+    `pool`: se vier de um ThreadedConnectionPool (ver get_db()), close()
+    devolve a conexao pro pool em vez de fecha-la de verdade. Sem pool (ex.:
+    a conexao avulsa usada por init_db() na subida do processo), close()
+    fecha a conexao normalmente."""
+
+    def __init__(self, conn, pool=None):
         self._conn = conn
+        self._pool = pool
 
     def execute(self, query, params=()):
         cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -119,11 +140,19 @@ class DBWrapper:
     def commit(self):
         self._conn.commit()
 
+    def rollback(self):
+        self._conn.rollback()
+
     def close(self):
-        self._conn.close()
+        if self._pool is not None:
+            self._pool.putconn(self._conn)
+        else:
+            self._conn.close()
 
 
 def _connect():
+    """Conexao avulsa (fora do pool) -- usada so pela migracao de schema em
+    init_db(), que roda uma vez na subida do processo, antes do pool existir."""
     conn = psycopg2.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME,
         sslmode="require" if DB_SSL else "prefer",
@@ -131,16 +160,48 @@ def _connect():
     return DBWrapper(conn)
 
 
+_db_pool = None
+
+
+def _get_pool():
+    global _db_pool
+    if _db_pool is None:
+        _db_pool = psycopg2.pool.ThreadedConnectionPool(
+            DB_POOL_MIN, DB_POOL_MAX,
+            host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME,
+            sslmode="require" if DB_SSL else "prefer",
+        )
+    return _db_pool
+
+
 def get_db():
     if "db" not in g:
-        g.db = _connect()
+        pool = _get_pool()
+        g.db = DBWrapper(pool.getconn(), pool=pool)
     return g.db
+
+
+def _get_worker_db():
+    """Conexao do mesmo pool, mas pra uso fora de uma requisicao Flask (o
+    worker de jobs em background nao tem contexto de app/`g` -- ver
+    jobs.py/_run_worker_loop() no fim deste arquivo)."""
+    pool = _get_pool()
+    return DBWrapper(pool.getconn(), pool=pool)
 
 
 @app.teardown_appcontext
 def close_db(exception=None):
     db = g.pop("db", None)
     if db is not None:
+        if exception is not None:
+            # a requisicao terminou com erro -- a transacao pode ter ficado
+            # pendurada (ex.: um INSERT sem commit). Sem isso, a proxima
+            # requisicao que pegar essa mesma conexao do pool herdaria uma
+            # transacao aberta indevida.
+            try:
+                db.rollback()
+            except Exception:
+                pass
         db.close()
 
 
@@ -240,6 +301,28 @@ def init_db():
         questions TEXT,
         created_at VARCHAR(32)
     );
+    CREATE TABLE IF NOT EXISTS jobs (
+        id SERIAL PRIMARY KEY,
+        job_type VARCHAR(64),
+        payload TEXT,
+        status VARCHAR(16) DEFAULT 'pending',
+        attempts INT DEFAULT 0,
+        max_attempts INT DEFAULT 3,
+        result TEXT,
+        error TEXT,
+        dedupe_key VARCHAR(128),
+        run_after VARCHAR(32),
+        created_at VARCHAR(32),
+        updated_at VARCHAR(32)
+    );
+    CREATE TABLE IF NOT EXISTS password_resets (
+        id SERIAL PRIMARY KEY,
+        account_id VARCHAR(36),
+        token VARCHAR(64) UNIQUE,
+        expires_at VARCHAR(32),
+        used INT DEFAULT 0,
+        created_at VARCHAR(32)
+    );
     CREATE TABLE IF NOT EXISTS ai_usage_log (
         id SERIAL PRIMARY KEY,
         account_id VARCHAR(36),
@@ -263,6 +346,11 @@ def init_db():
         "account_id": "VARCHAR(36)",
         "build_name": "VARCHAR(255) DEFAULT 'Minha build'",
         "last_active_at": "VARCHAR(32)",
+        # streak diario (ver _update_streak()) -- conta dias seguidos com
+        # pelo menos 1 missao registrada, independente do ciclo de 14 dias.
+        "current_streak": "INT DEFAULT 0",
+        "longest_streak": "INT DEFAULT 0",
+        "last_streak_date": "VARCHAR(32)",
     })
     _ensure_columns(db, "missions", {
         "tier": "VARCHAR(32)", "duration_min": "DOUBLE PRECISION", "detail": "TEXT", "action": "VARCHAR(32)",
@@ -276,6 +364,13 @@ def init_db():
         "ai_tokens_granted": f"INT DEFAULT {FREE_TRIAL_AI_TOKENS}",
         "ai_tokens_used": "DOUBLE PRECISION DEFAULT 0",
         "ai_plan": "VARCHAR(32) DEFAULT 'trial'",  # trial | paid | blocked
+        # rate limit de login por conta (ver _register_failed_login/login()).
+        "failed_login_count": "INT DEFAULT 0",
+        "locked_until": "VARCHAR(32)",
+        # faturamento (ver billing.py) -- plan_tier controla acesso a
+        # funcionalidades pagas; ai_plan continua controlando so a cota de IA.
+        "stripe_customer_id": "VARCHAR(255)",
+        "plan_tier": "VARCHAR(32) DEFAULT 'free'",  # free | pro | elite
     })
 
     # migracao unica: bancos de versoes anteriores tinham 1 build = 1 conta de
@@ -421,12 +516,12 @@ def create_build(account_id, build_name="Nova build", nome=""):
     return build_id
 
 
-def get_user():
-    ensure_active_build()
-    if not session.get("user_id"):
-        return None
-    db = get_db()
-    row = db.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+def _load_user_row(db, user_id):
+    """Carrega e desserializa uma build pelo id, sem depender de sessao --
+    usado tanto por get_user() (dentro de uma requisicao) quanto pelo worker
+    de jobs em background (fora de qualquer requisicao/sessao, ver
+    _run_worker_loop() no fim deste arquivo)."""
+    row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if row is None:
         return None
     user = dict(row)
@@ -434,6 +529,13 @@ def get_user():
                   "custom_area_labels", "custom_goal_labels", "goal_details"):
         user[field] = json.loads(user[field] or ("[]" if field == "areas" else "{}"))
     return user
+
+
+def get_user():
+    ensure_active_build()
+    if not session.get("user_id"):
+        return None
+    return _load_user_row(get_db(), session["user_id"])
 
 
 def save_user_fields(user_id, **fields):
@@ -528,6 +630,29 @@ def register():
     return redirect(url_for("index"))
 
 
+# rate limit de login: por CONTA (nao por IP) -- mais simples e nao exige
+# infraestrutura nova (Redis etc.), suficiente para o estagio atual do
+# produto. Uma limitacao real: nao protege contra um atacante testando muitas
+# contas diferentes a partir do mesmo IP -- se isso virar um problema na
+# pratica, a evolucao natural e um limite por IP tambem, guardado do mesmo
+# jeito (sem precisar de Redis ainda, so mais uma tabela).
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def _register_failed_login(db, account_row):
+    count = (account_row["failed_login_count"] or 0) + 1
+    locked_until = None
+    if count >= LOGIN_MAX_ATTEMPTS:
+        locked_until = (datetime.now() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)).isoformat()
+        count = 0  # zera o contador ao travar -- a proxima janela comeca do zero apos o desbloqueio
+    db.execute(
+        "UPDATE accounts SET failed_login_count=?, locked_until=? WHERE id=?",
+        (count, locked_until, account_row["id"]),
+    )
+    db.commit()
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
@@ -536,10 +661,76 @@ def login():
     password = request.form.get("password", "")
     db = get_db()
     row = db.execute("SELECT * FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
+
+    if row and row["locked_until"]:
+        if datetime.now() < datetime.fromisoformat(row["locked_until"]):
+            return render_template(
+                "welcome.html",
+                erro="Muitas tentativas erradas nessa conta. Tente de novo em alguns minutos.",
+            )
+
     if row is None or not row["password_hash"] or not check_password_hash(row["password_hash"], password):
+        if row is not None:
+            _register_failed_login(db, row)
         return render_template("welcome.html", erro="E-mail ou senha incorretos.")
+
+    if row["failed_login_count"] or row["locked_until"]:
+        db.execute("UPDATE accounts SET failed_login_count=0, locked_until=NULL WHERE id=?", (row["id"],))
+        db.commit()
     _attach_session_to_account(row["id"])
     return redirect(url_for("index"))
+
+
+PASSWORD_RESET_EXPIRY_MINUTES = 60
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "GET":
+        return render_template("forgot_password.html")
+
+    email = request.form.get("email", "").strip().lower()
+    db = get_db()
+    row = db.execute("SELECT id FROM accounts WHERE email=? AND is_guest=0", (email,)).fetchone()
+    if row:
+        token = secrets.token_urlsafe(32)
+        expires_at = (datetime.now() + timedelta(minutes=PASSWORD_RESET_EXPIRY_MINUTES)).isoformat()
+        db.execute(
+            "INSERT INTO password_resets (account_id, token, expires_at, created_at) VALUES (?, ?, ?, ?)",
+            (row["id"], token, expires_at, datetime.now().isoformat()),
+        )
+        db.commit()
+        reset_url = url_for("reset_password", token=token, _external=True)
+        email_sender.send_password_reset(email, reset_url)
+
+    # mensagem sempre igual, exista ou nao a conta -- evita que alguem use
+    # esse formulario pra descobrir quais e-mails tem conta no sistema.
+    return render_template("forgot_password.html", enviado=True)
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    db = get_db()
+    row = db.execute("SELECT * FROM password_resets WHERE token=? AND used=0", (token,)).fetchone()
+    valido = row is not None and datetime.now() < datetime.fromisoformat(row["expires_at"])
+
+    if request.method == "GET":
+        return render_template("reset_password.html", valido=valido)
+    if not valido:
+        return render_template("reset_password.html", valido=False)
+
+    password = request.form.get("password", "")
+    if not password or len(password) < 4:
+        return render_template("reset_password.html", valido=True,
+                                erro="A senha precisa ter pelo menos 4 caracteres.")
+
+    db.execute(
+        "UPDATE accounts SET password_hash=?, failed_login_count=0, locked_until=NULL WHERE id=?",
+        (generate_password_hash(password), row["account_id"]),
+    )
+    db.execute("UPDATE password_resets SET used=1 WHERE id=?", (row["id"],))
+    db.commit()
+    return render_template("welcome.html", sucesso="Senha alterada. Faça login com a nova senha.")
 
 
 @app.route("/auth/google", methods=["POST"])
@@ -1037,24 +1228,22 @@ def _build_ai_history(db, user):
     return history
 
 
-def _update_ai_strategy(user):
+def _update_ai_strategy(db, user, account_id):
     """Gera (se a Groq estiver configurada e houver cota) uma nota curta de
     estrategia por area (ver ai.generate_strategy_note) e salva em
     extra_info. Falha silenciosamente -- a build funciona 100% sem isso.
 
-    Contas-convidado (modo teste) NUNCA disparam chamada de IA: a chave da
-    Groq/DeepSeek e unica e compartilhada por todo o app (ver ai.py), entao
-    isso e o que evita que trafego anonimo de teste consuma a cota gratuita
-    de quem tem conta de verdade. Ver mensagem equivalente no dashboard.
+    Sem dependencia de `session`/`g` de proposito: hoje isso roda dentro do
+    worker de jobs em background (ver _run_worker_loop()), fora de qualquer
+    requisicao HTTP -- por isso `db` e `account_id` vem explicitos em vez de
+    get_db()/session.get(). Quem decide SE isso deve rodar (contas-convidado
+    nunca disparam IA -- ver _enqueue_ai_strategy_job()) roda antes, ainda
+    dentro da requisicao, onde a sessao existe de verdade.
 
-    Contas com o teste gratis de tokens esgotado (ver ai_billing.py) tambem
-    caem nesse fallback silencioso ate assinarem um plano pago."""
-    if session.get("is_guest"):
-        return
+    Contas com o teste gratis de tokens esgotado (ver ai_billing.py) caem em
+    fallback silencioso ate assinarem um plano pago."""
     if not ai.ai_available():
         return
-    account_id = session.get("account_id")
-    db = get_db()
     account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
     if not ai_billing.has_quota(account):
         return
@@ -1068,6 +1257,17 @@ def _update_ai_strategy(user):
         extra_info["ai_strategy"] = notes
         db.execute("UPDATE users SET extra_info=? WHERE id=?", (json.dumps(extra_info), user["id"]))
         db.commit()
+
+
+def _enqueue_ai_strategy_job(db, user_id, account_id):
+    """Chamado de dentro de uma requisicao (tem sessao) -- decide SE vale a
+    pena gerar a nota de estrategia, e so entao poe na fila. O trabalho
+    pesado (chamada a Groq) acontece depois, no worker, fora do caminho da
+    requisicao -- e por isso fechar um ciclo nao fica mais lento so por causa
+    da IA (ver auditoria de arquitetura, item de chamadas sincronas)."""
+    if session.get("is_guest") or not ai.ai_available():
+        return
+    jobs.enqueue(db, "ai_strategy", {"user_id": user_id, "account_id": account_id})
 
 
 def _finalize_build(user):
@@ -1094,7 +1294,7 @@ def _finalize_build(user):
         (today.isoformat(), today.isoformat(), user["id"]),
     )
     db.commit()
-    _update_ai_strategy(get_user() or user)
+    _enqueue_ai_strategy_job(db, user["id"], session.get("account_id"))
 
 
 def ensure_goal_progress_rows(user):
@@ -1210,6 +1410,16 @@ def dashboard():
         (user["id"], user["current_cycle"]),
     ).fetchone()["c"]
 
+    # progresso semanal para o hero do dashboard: % de missoes registradas
+    # nos ultimos 7 dias (rotina fora -- e sempre a mesma, nao mede objetivo).
+    week_start = (today - timedelta(days=6)).isoformat()
+    week_row = db.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN completion_pct IS NOT NULL THEN 1 ELSE 0 END) logged "
+        "FROM missions WHERE user_id=? AND date>=? AND date<=? AND area != 'rotina'",
+        (user["id"], week_start, today_iso),
+    ).fetchone()
+    week_completion_pct = round(100 * week_row["logged"] / week_row["total"]) if week_row["total"] else 0
+
     goal_progress_rows = db.execute(
         "SELECT * FROM goal_progress WHERE user_id=? ORDER BY area", (user["id"],)
     ).fetchall()
@@ -1255,6 +1465,8 @@ def dashboard():
     for m in missions_today:
         missions_by_area.setdefault(m["area"], []).append(m)
 
+    level, xp_in_level, xp_to_next = xp_level_progress(user["vitality_points_accum"] or 0)
+
     return render_template(
         "dashboard.html",
         user=user,
@@ -1262,6 +1474,12 @@ def dashboard():
         missions_by_area=missions_by_area,
         total_missions=total_missions,
         logged_missions=logged_missions,
+        week_completion_pct=week_completion_pct,
+        level=level,
+        xp_in_level=round(xp_in_level),
+        xp_to_next=round(xp_to_next) if xp_to_next is not None else None,
+        current_streak=user["current_streak"] or 0,
+        longest_streak=user["longest_streak"] or 0,
         goal_progress_rows=goal_progress_rows,
         vitality_pct=round(user["vitality_pct"] or 0, 1),
         overall_progress=overall_progress,
@@ -1400,7 +1618,7 @@ def checkpoint():
         (json.dumps(new_niveis), next_cycle, today.isoformat(), today.isoformat(), user["id"]),
     )
     db.commit()
-    _update_ai_strategy(get_user() or user)
+    _enqueue_ai_strategy_job(db, user["id"], session.get("account_id"))
 
     return redirect(url_for("dashboard"))
 
@@ -1424,46 +1642,58 @@ def _quiz_topic_for(user, mission):
     return f"{area_lbl} / {goal_lbl}"
 
 
-def _get_or_generate_quiz(mission, user, n):
-    db = get_db()
+def _save_quiz_cache(db, mission_id, topic, source, questions):
+    if not questions:
+        return
+    db.execute(
+        "INSERT INTO ai_quiz_cache (mission_id, topic, source, questions, created_at) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT (mission_id) DO UPDATE SET "
+        "topic=EXCLUDED.topic, source=EXCLUDED.source, questions=EXCLUDED.questions, created_at=EXCLUDED.created_at",
+        (mission_id, topic, source, json.dumps(questions), datetime.now().isoformat()),
+    )
+    db.commit()
+
+
+def _get_cached_quiz(db, mission_id, n):
     cached = db.execute(
-        "SELECT questions FROM ai_quiz_cache WHERE mission_id=?", (mission["id"],)
+        "SELECT questions, source FROM ai_quiz_cache WHERE mission_id=?", (mission_id,)
     ).fetchone()
-    if cached:
-        questions = json.loads(cached["questions"])
-        if len(questions) >= min(n, 3):  # cache valido e utilizavel
-            return questions[:n], "cache"
+    if not cached:
+        return None, None
+    questions = json.loads(cached["questions"])
+    if len(questions) < min(n, 3):  # cache existente mas insuficiente
+        return None, None
+    return questions[:n], cached["source"]
+
+
+def _run_quiz_generate_job(db, payload):
+    """Handler do job 'quiz_generate' -- roda no worker em background (ver
+    _run_worker_loop()), nunca no caminho da requisicao. Gera as questoes por
+    IA (DeepSeek) pro tema que o usuario digitou; se a IA falhar ou nao
+    estiver disponivel na hora em que o job roda, cai pro banco estatico, do
+    mesmo jeito que o caminho sincrono antigo fazia."""
+    mission_id, user_id, n = payload["mission_id"], payload["user_id"], payload["n"]
+    mission = db.execute("SELECT * FROM missions WHERE id=?", (mission_id,)).fetchone()
+    user = _load_user_row(db, user_id)
+    if mission is None or user is None:
+        return
+    if _get_cached_quiz(db, mission_id, n)[0] is not None:
+        return  # outra tentativa/worker ja resolveu esse job
 
     topic = _quiz_topic_for(user, mission)
-    # mesma regra da nota de estrategia: convidado (modo teste) nunca chama a
-    # IA, so usuarios com conta -- ver _update_ai_strategy() pro motivo.
-    account_id = session.get("account_id")
+    account_id = user.get("account_id")
     account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone() if account_id else None
-    ai_allowed = (
-        ai.quiz_ai_available()
-        and not session.get("is_guest")
-        and ai_billing.has_quota(account)
-    )
-    questions, usage = ai.generate_quiz_questions(topic, n=n) if ai_allowed else (None, None)
+    questions, usage = (None, None)
+    if ai.quiz_ai_available() and ai_billing.has_quota(account):
+        questions, usage = ai.generate_quiz_questions(topic, n=n)
     if usage:
-        ai_billing.record_usage(db, account_id, user["id"], "deepseek", ai.DEEPSEEK_MODEL, "quiz", usage)
+        ai_billing.record_usage(db, account_id, user_id, "deepseek", ai.DEEPSEEK_MODEL, "quiz", usage)
     source = "ia"
     if not questions:
-        # fallback: banco estatico generico (so cobre alguns temas fixos, ex.
-        # concurso publico "classico" -- pode nao bater 100% com o tema digitado)
-        questions = pick_quiz_questions(mission["area"], mission["goal"], n=n, seed=mission["id"])
+        questions = pick_quiz_questions(mission["area"], mission["goal"], n=n, seed=mission_id)
         source = "banco_estatico" if questions else "indisponivel"
-
-    if questions:
-        db.execute(
-            "INSERT INTO ai_quiz_cache (mission_id, topic, source, questions, created_at) "
-            "VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT (mission_id) DO UPDATE SET "
-            "topic=EXCLUDED.topic, source=EXCLUDED.source, questions=EXCLUDED.questions, created_at=EXCLUDED.created_at",
-            (mission["id"], topic, source, json.dumps(questions), datetime.now().isoformat()),
-        )
-        db.commit()
-    return questions, source
+    _save_quiz_cache(db, mission_id, topic, source, questions)
 
 
 @app.route("/quiz/<int:mission_id>", methods=["GET", "POST"])
@@ -1485,7 +1715,33 @@ def quiz(mission_id):
     action_parts = (mission["action"] or "quiz:5").split(":")
     n = int(action_parts[1]) if len(action_parts) > 1 and action_parts[1].isdigit() else 5
 
-    questions, source = _get_or_generate_quiz(mission, user, n)
+    questions, source = _get_cached_quiz(db, mission_id, n)
+
+    if questions is None:
+        if request.method == "POST":
+            # so deveria acontecer se o usuario forcar um POST antes da tela
+            # de espera terminar -- manda de volta pra tela que decide certo.
+            return redirect(url_for("quiz", mission_id=mission_id))
+
+        account_id = session.get("account_id")
+        account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone() if account_id else None
+        ai_allowed = ai.quiz_ai_available() and not session.get("is_guest") and ai_billing.has_quota(account)
+
+        if ai_allowed:
+            # gera em background (chamada a DeepSeek pode levar ate ~25s --
+            # nao vale prender a requisicao/worker do gunicorn esperando).
+            jobs.enqueue(
+                db, "quiz_generate", {"mission_id": mission_id, "user_id": user_id, "n": n},
+                dedupe_key=f"quiz:{mission_id}",
+            )
+            return render_template("quiz_generating.html", mission=mission)
+
+        # sem IA disponivel/sem cota: banco estatico e sincrono e rapido,
+        # nao ha motivo pra passar pela fila.
+        static_questions = pick_quiz_questions(mission["area"], mission["goal"], n=n, seed=mission_id)
+        static_source = "banco_estatico" if static_questions else "indisponivel"
+        _save_quiz_cache(db, mission_id, _quiz_topic_for(user, mission), static_source, static_questions)
+        questions, source = static_questions, static_source
 
     if not questions:
         return render_template("quiz.html", mission=mission, questions=[], source=source)
@@ -1513,6 +1769,29 @@ def quiz(mission_id):
 # ---------------------------------------------------------------------------
 # APIs de interacao diaria
 # ---------------------------------------------------------------------------
+def _update_streak(db, user_id):
+    """Atualiza o streak diario (dias seguidos com pelo menos 1 missao
+    registrada) -- independente do ciclo de 14 dias, que e sobre progresso de
+    objetivo, nao sobre uso diario. So conta a primeira missao do dia; chamar
+    de novo no mesmo dia e um no-op."""
+    today = date.today()
+    row = db.execute(
+        "SELECT current_streak, longest_streak, last_streak_date FROM users WHERE id=?", (user_id,)
+    ).fetchone()
+    if row is None:
+        return
+    last = date.fromisoformat(row["last_streak_date"]) if row["last_streak_date"] else None
+    if last == today:
+        return
+    new_streak = (row["current_streak"] or 0) + 1 if last == today - timedelta(days=1) else 1
+    longest = max(row["longest_streak"] or 0, new_streak)
+    db.execute(
+        "UPDATE users SET current_streak=?, longest_streak=?, last_streak_date=? WHERE id=?",
+        (new_streak, longest, today.isoformat(), user_id),
+    )
+    db.commit()
+
+
 @app.route("/api/log_mission/<int:mission_id>", methods=["POST"])
 @guest_allowed
 def log_mission(mission_id):
@@ -1539,6 +1818,7 @@ def log_mission(mission_id):
         (pct, points, datetime.now().isoformat(), mission_id),
     )
     db.commit()
+    _update_streak(db, user_id)
 
     return jsonify({"ok": True, "pct": pct, "points": points})
 
@@ -1581,10 +1861,156 @@ def upgrade():
         db = get_db()
         account = db.execute("SELECT * FROM accounts WHERE id=?", (session["account_id"],)).fetchone()
         quota = ai_billing.get_quota(account)
-    return render_template("upgrade.html", quota=quota)
+    return render_template(
+        "upgrade.html", quota=quota,
+        billing_available=billing.billing_available(),
+        checkout_status=request.args.get("checkout"),
+    )
+
+
+@app.route("/billing/checkout/<plan>", methods=["POST"])
+@real_account_required
+def billing_checkout(plan):
+    if plan not in billing.PLAN_TOKENS or not billing.billing_available():
+        return redirect(url_for("upgrade"))
+    db = get_db()
+    account = db.execute("SELECT * FROM accounts WHERE id=?", (session["account_id"],)).fetchone()
+    checkout_url = billing.create_checkout_session(
+        account, plan,
+        success_url=url_for("upgrade", checkout="sucesso", _external=True),
+        cancel_url=url_for("upgrade", checkout="cancelado", _external=True),
+    )
+    return redirect(checkout_url or url_for("upgrade"))
+
+
+@app.route("/billing/webhook", methods=["POST"])
+def billing_webhook():
+    """Endpoint chamado pela Stripe (nao pelo navegador) -- autenticado por
+    assinatura de webhook, nao por sessao. Sem STRIPE_WEBHOOK_SECRET
+    configurada, verify_webhook_event sempre devolve None e respondemos 400
+    sem processar nada."""
+    event = billing.verify_webhook_event(request.get_data(), request.headers.get("Stripe-Signature", ""))
+    if event is None:
+        return "", 400
+
+    db = get_db()
+    etype = event["type"]
+    obj = event["data"]["object"]
+
+    if etype == "checkout.session.completed":
+        account_id = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("account_id")
+        plan = (obj.get("metadata") or {}).get("plan")
+        customer_id = obj.get("customer")
+        if account_id and plan in billing.PLAN_TOKENS:
+            db.execute(
+                "UPDATE accounts SET plan_tier=?, ai_plan='paid', ai_tokens_granted=?, "
+                "ai_tokens_used=0, stripe_customer_id=? WHERE id=?",
+                (plan, billing.PLAN_TOKENS[plan], customer_id, account_id),
+            )
+            db.commit()
+    elif etype == "invoice.paid":
+        # renovacao mensal da assinatura -- reseta a cota do ciclo de cobranca novo.
+        customer_id = obj.get("customer")
+        if customer_id:
+            row = db.execute("SELECT plan_tier FROM accounts WHERE stripe_customer_id=?", (customer_id,)).fetchone()
+            if row and row["plan_tier"] in billing.PLAN_TOKENS:
+                db.execute(
+                    "UPDATE accounts SET ai_tokens_used=0, ai_tokens_granted=? WHERE stripe_customer_id=?",
+                    (billing.PLAN_TOKENS[row["plan_tier"]], customer_id),
+                )
+                db.commit()
+    elif etype in ("customer.subscription.deleted", "invoice.payment_failed"):
+        customer_id = obj.get("customer")
+        if customer_id:
+            db.execute(
+                "UPDATE accounts SET plan_tier='free', ai_plan='trial' WHERE stripe_customer_id=?",
+                (customer_id,),
+            )
+            db.commit()
+
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Worker de jobs em background -- roda como uma thread dentro do proprio
+# processo (web ou dev), NAO como um servico separado. Ver jobs.py para o
+# porque de Postgres em vez de Redis. Cada handler recebe (db, payload) e
+# roda inteiramente fora do contexto de uma requisicao Flask -- nada de
+# session/g/request aqui dentro, so o que vier explicito no payload.
+# ---------------------------------------------------------------------------
+def _run_ai_strategy_job(db, payload):
+    user = _load_user_row(db, payload["user_id"])
+    if user is None:
+        return
+    _update_ai_strategy(db, user, payload["account_id"])
+
+
+JOB_HANDLERS = {
+    "ai_strategy": _run_ai_strategy_job,
+    "quiz_generate": _run_quiz_generate_job,
+}
+
+JOB_POLL_INTERVAL_SECONDS = float(os.environ.get("JOB_POLL_INTERVAL_SECONDS", 2))
+_worker_thread_started = False
+_worker_thread_lock = threading.Lock()
+
+
+def _run_worker_loop():
+    while True:
+        db = None
+        try:
+            db = _get_worker_db()
+            job = jobs.claim_next_job(db)
+            if job is None:
+                db.close()
+                time.sleep(JOB_POLL_INTERVAL_SECONDS)
+                continue
+            handler = JOB_HANDLERS.get(job["job_type"])
+            try:
+                if handler:
+                    handler(db, json.loads(job["payload"] or "{}"))
+                else:
+                    print(f"[jobs] tipo de job desconhecido: {job['job_type']!r} (id={job['id']})")
+                jobs.mark_done(db, job["id"])
+            except Exception as e:
+                print(f"[jobs] job {job['id']} ({job['job_type']}) falhou: {e!r}")
+                db.rollback()
+                jobs.mark_failed(db, job, e)
+            db.close()
+        except Exception as e:
+            # erro na propria mecanica da fila (ex.: banco fora do ar
+            # momentaneamente) -- loga, espera e tenta de novo. O worker
+            # nunca deve morrer por causa de um job ruim ou uma falha
+            # transitoria de conexao.
+            print(f"[jobs] erro no loop do worker: {e!r}")
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+            time.sleep(JOB_POLL_INTERVAL_SECONDS)
+
+
+def start_worker():
+    """Sobe a thread do worker uma unica vez por processo. Com gunicorn (sem
+    --preload), cada worker do gunicorn importa app.py de novo e chama isso
+    de novo -- e proposital: cada processo gunicorn fica com sua propria
+    thread poller, todas disputando o mesmo `jobs` via FOR UPDATE SKIP
+    LOCKED, sem duplicar trabalho e sem precisar de nenhum servico novo."""
+    global _worker_thread_started
+    with _worker_thread_lock:
+        if _worker_thread_started:
+            return
+        _worker_thread_started = True
+        threading.Thread(target=_run_worker_loop, daemon=True, name="lb-job-worker").start()
 
 
 init_db()
+# mesmo padrao de init_db() acima: roda uma vez por processo que importar
+# app.py (cada worker do gunicorn, e tambem o processo "monitor" do reloader
+# do Flask em dev -- nesse ultimo caso sobra uma thread ociosa no monitor,
+# inofensivo, so poll sem nada pra fazer na maior parte do tempo).
+start_worker()
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "1") == "1"

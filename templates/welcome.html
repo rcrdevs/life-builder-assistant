@@ -7,6 +7,7 @@
     <p class="lb-lede">Áreas, metas e missões diárias organizadas como um RPG de verdade — com ciclos de 14 dias e progresso que você acompanha de perto.</p>
 
     {% if erro %}<p class="lb-error">{{ erro }}</p>{% endif %}
+    {% if sucesso %}<p class="lb-success">{{ sucesso }}</p>{% endif %}
 
     {% if google_client_id %}
     <div class="lb-auth__google">
@@ -31,6 +32,7 @@
             <span>Senha</span>
             <input type="password" name="password" required autocomplete="current-password">
         </label>
+        <p class="lb-auth__forgot"><a href="{{ url_for('forgot_password') }}">Esqueceu a senha?</a></p>
         <div class="lb-welcome__actions">
             <button type="submit" class="lb-btn lb-btn--primary">Entrar →</button>
             <a href="{{ url_for('register') }}" class="lb-btn lb-btn--ghost">Criar conta</a>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Gerando simulado{% endblock %}
+{% block head_extra %}
+<meta http-equiv="refresh" content="2">
+{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Cancelar</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Simulado</p>
+    <h1 class="lb-title lb-title--md">{{ mission.description }}</h1>
+    <p class="lb-lede lb-quiz-generating">
+        <span class="lb-quiz-generating__spinner" aria-hidden="true"></span>
+        Gerando as questões desse simulado com IA para o tema que você digitou — isso leva só alguns
+        segundos. Esta página atualiza sozinha assim que ficar pronto.
+    </p>
+</section>
+<script>setTimeout(function () { location.reload(); }, 2000);</script>
+{% endblock %}

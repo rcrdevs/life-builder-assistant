@@ -251,6 +251,34 @@ def grade_quiz(questions, answers):
     return acertos, total, pct, detalhe
 
 
+# Niveis de XP (deterministico, sem IA) -- XP = vitality_points_accum, os
+# pontos de rotina ja acumulados desde sempre pela conta. Limiares crescem
+# progressivamente; ajustavel aqui sem tocar em nenhum outro lugar do app,
+# ja que quem exibe (dashboard) so chama xp_level(total_xp).
+XP_LEVELS = [0, 15, 40, 80, 140, 220, 320, 450, 600, 800, 1050]
+
+
+def xp_level(total_xp):
+    """Nivel (1-indexado) correspondente ao XP acumulado total."""
+    level = 1
+    for i, threshold in enumerate(XP_LEVELS):
+        if total_xp >= threshold:
+            level = i + 1
+    return level
+
+
+def xp_level_progress(total_xp):
+    """Retorna (nivel, xp_no_nivel, xp_necessario_pro_proximo_nivel|None) --
+    usado pra desenhar uma barra de progresso "faltam X XP pro nivel Y"."""
+    level = xp_level(total_xp)
+    idx = level - 1
+    floor = XP_LEVELS[idx] if idx < len(XP_LEVELS) else XP_LEVELS[-1]
+    if level < len(XP_LEVELS):
+        ceiling = XP_LEVELS[level]
+        return level, total_xp - floor, ceiling - floor
+    return level, total_xp - floor, None
+
+
 def blend_checkpoint_progress(measured_pct, self_rating_0_10):
     """
     Combina o progresso medido (pelas missoes realmente registradas) com a

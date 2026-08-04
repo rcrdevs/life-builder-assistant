@@ -12,6 +12,34 @@
 {% endblock %}
 {% block content %}
 
+<section class="lb-hero">
+    <div class="lb-hero__item lb-hero__item--level">
+        <span class="lb-hero__label">Nível</span>
+        <span class="lb-hero__value">{{ level }}</span>
+        {% if xp_to_next is not none %}
+        <div class="lb-hero__bar"><div class="lb-hero__bar-fill" style="width: {{ (xp_in_level / xp_to_next * 100) if xp_to_next else 0 }}%"></div></div>
+        <span class="lb-hero__hint">{{ xp_in_level }}/{{ xp_to_next }} XP</span>
+        {% else %}
+        <span class="lb-hero__hint">nível máximo</span>
+        {% endif %}
+    </div>
+    <div class="lb-hero__item">
+        <span class="lb-hero__label">Streak</span>
+        <span class="lb-hero__value">{{ current_streak }}<small>d</small></span>
+        <span class="lb-hero__hint">recorde: {{ longest_streak }}d</span>
+    </div>
+    <div class="lb-hero__item">
+        <span class="lb-hero__label">Energia</span>
+        <span class="lb-hero__value">{{ vitality_pct|round }}<small>%</small></span>
+        <span class="lb-hero__hint">vitalidade da rotina</span>
+    </div>
+    <div class="lb-hero__item">
+        <span class="lb-hero__label">Semana</span>
+        <span class="lb-hero__value">{{ week_completion_pct }}<small>%</small></span>
+        <span class="lb-hero__hint">missões concluídas (7d)</span>
+    </div>
+</section>
+
 {% if is_guest %}
 <div class="lb-guest-banner">
     <div>
