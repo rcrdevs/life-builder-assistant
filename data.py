@@ -80,26 +80,14 @@ AREAS = {
     "profissional": "Profissional",
     "estudos": "Estudos",
     "saude": "Saúde",
-    "financas": "Finanças",
-    "mental": "Mente & Foco",
-    "relacionamentos": "Relacionamentos",
     "espiritualidade": "Espiritualidade",
-    "arte": "Arte",
-    "social": "Social",
-    "sono": "Sono & Descanso",
 }
 
 AREA_ICONS = {
     "profissional": "▲",
     "estudos": "◆",
     "saude": "⬡",
-    "financas": "◈",
-    "mental": "◎",
-    "relacionamentos": "✚",
     "espiritualidade": "✶",
-    "arte": "✷",
-    "social": "❖",
-    "sono": "☾",
     "rotina": "∴",
 }
 
@@ -125,42 +113,10 @@ GOALS = {
         "paideia_moderado": "Paideia — nível moderado (condicionamento geral)",
         "paideia_avancado": "Paideia — nível avançado (ganho de massa muscular)",
     },
-    "financas": {
-        "reserva": "Construir uma reserva de emergência",
-        "quitar_dividas": "Quitar dívidas",
-        "investir": "Aprender a investir",
-    },
-    "mental": {
-        "foco": "Melhorar foco e produtividade",
-        "ansiedade": "Reduzir ansiedade / estresse",
-        "habito": "Construir uma rotina sólida",
-    },
-    "relacionamentos": {
-        "romantico": "Melhorar um relacionamento amoroso",
-        "amizades": "Fazer e cultivar novas amizades",
-        "familia": "Fortalecer laços familiares",
-    },
     "espiritualidade": {
         "meditacao": "Estabelecer uma prática regular de meditação",
         "proposito": "Encontrar mais senso de propósito",
         "gratidao": "Cultivar uma prática de gratidão",
-    },
-    "arte": {
-        "musica": "Desenvolver música (instrumento ou canto)",
-        "artes_visuais": "Desenvolver desenho, pintura ou artes visuais",
-        "escrita": "Desenvolver escrita criativa",
-        "teatro_danca": "Desenvolver atuação, teatro ou dança",
-    },
-    "social": {
-        "oratoria": "Melhorar a fala e a oratória",
-        "sintese_didatica": "Desenvolver poder de síntese e didática",
-        "expandir_circulo": "Ampliar o círculo social e fazer novos amigos",
-        "carisma": "Desenvolver carisma e habilidades sociais no geral",
-    },
-    "sono": {
-        "qualidade_sono": "Melhorar a qualidade do sono",
-        "rotina_noturna": "Construir uma rotina noturna saudável",
-        "energia": "Ter mais energia ao longo do dia",
     },
 }
 
@@ -199,26 +155,6 @@ GOALS_NEEDING_DETAIL = {
         "prompt": "Qual prova você está treinando para correr?",
         "placeholder": "Ex: Maratona de São Paulo 2026",
         "fallback": "a prova",
-    },
-    ("arte", "musica"): {
-        "prompt": "Qual instrumento (ou canto)?",
-        "placeholder": "Ex: violão, piano, canto...",
-        "fallback": "seu instrumento",
-    },
-    ("arte", "artes_visuais"): {
-        "prompt": "Qual técnica ou estilo?",
-        "placeholder": "Ex: desenho a lápis, aquarela, digital...",
-        "fallback": "sua técnica",
-    },
-    ("arte", "escrita"): {
-        "prompt": "Que tipo de projeto/gênero?",
-        "placeholder": "Ex: conto, roteiro, poesia, romance...",
-        "fallback": "seu projeto de escrita",
-    },
-    ("arte", "teatro_danca"): {
-        "prompt": "Qual modalidade?",
-        "placeholder": "Ex: teatro, dança contemporânea, balé...",
-        "fallback": "sua modalidade",
     },
 }
 
@@ -262,6 +198,7 @@ MISSION_TEMPLATES = {
         {"desc": "Praticar conversação em {detalhe} por 15 minutos (tandem ou tutor)", "stat": "foco", "points": 3, "nivel": "intermediario", "period": "noite"},
         {"desc": "Escrever um parágrafo curto em {detalhe}", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "noite"},
         {"desc": "Revisar 10 palavras novas de vocabulário em {detalhe}", "stat": "inteligencia", "points": 1, "nivel": "iniciante", "period": "manha"},
+        {"desc": "Fazer um quiz de gramática e vocabulário de {detalhe}", "stat": "inteligencia", "points": 2, "nivel": "todos", "period": "tarde", "action": "quiz:5"},
     ],
     ("estudos", "bolsa"): [
         {"desc": "Estudar 1 tópico de prova padronizada para {detalhe}", "stat": "inteligencia", "points": 2, "nivel": "todos", "period": "manha"},
@@ -314,51 +251,6 @@ MISSION_TEMPLATES = {
         {"desc": "Garantir a meta de proteína do dia", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "manha"},
         {"desc": "Registrar cargas/repetições no diário de treino", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "tarde"},
     ],
-    ("financas", "reserva"): [
-        {"desc": "Transferir um valor definido para a reserva de emergência", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "manha"},
-        {"desc": "Revisar gastos do dia e cortar 1 gasto evitável", "stat": "foco", "points": 1, "nivel": "todos", "period": "noite"},
-        {"desc": "Pesquisar uma opção de investimento de liquidez diária", "stat": "inteligencia", "points": 2, "nivel": "intermediario", "period": "tarde"},
-    ],
-    ("financas", "quitar_dividas"): [
-        {"desc": "Listar todas as dívidas com taxas de juros", "stat": "inteligencia", "points": 2, "nivel": "iniciante", "period": "manha"},
-        {"desc": "Fazer um pagamento extra na dívida de maior juros", "stat": "disciplina", "points": 3, "nivel": "todos", "period": "tarde"},
-        {"desc": "Negociar/renegociar uma dívida com o credor", "stat": "foco", "points": 3, "nivel": "todos", "period": "tarde"},
-    ],
-    ("financas", "investir"): [
-        {"desc": "Estudar um conceito novo de investimento", "stat": "inteligencia", "points": 2, "nivel": "todos", "period": "manha"},
-        {"desc": "Revisar a carteira de investimentos atual", "stat": "foco", "points": 1, "nivel": "intermediario", "period": "tarde"},
-        {"desc": "Simular um aporte mensal e projetar o resultado em 5 anos", "stat": "inteligencia", "points": 2, "nivel": "todos", "period": "noite"},
-    ],
-    ("mental", "foco"): [
-        {"desc": "Bloco de trabalho profundo de 45 min sem celular", "stat": "foco", "points": 3, "nivel": "todos", "period": "manha"},
-        {"desc": "Planejar as 3 prioridades do dia de manhã", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "manha"},
-        {"desc": "Eliminar uma distração recorrente (notificação, aba, app)", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-    ],
-    ("mental", "ansiedade"): [
-        {"desc": "10 minutos de respiração guiada ou meditação", "stat": "foco", "points": 2, "nivel": "todos", "period": "manha"},
-        {"desc": "Escrever 3 pensamentos ansiosos e reformulá-los", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Caminhada ao ar livre sem celular", "stat": "resistencia", "points": 2, "nivel": "todos", "period": "tarde"},
-    ],
-    ("mental", "habito"): [
-        {"desc": "Executar o hábito-alvo no horário planejado", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "manha"},
-        {"desc": "Preparar o ambiente à noite para facilitar o hábito de amanhã", "stat": "foco", "points": 1, "nivel": "todos", "period": "noite"},
-        {"desc": "Registrar a sequência (streak) no diário de hábitos", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "noite"},
-    ],
-    ("relacionamentos", "romantico"): [
-        {"desc": "Ter uma conversa sem celulares por 15 minutos", "stat": "foco", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Planejar um momento a dois para a semana", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Expressar um agradecimento específico ao parceiro(a)", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "manha"},
-    ],
-    ("relacionamentos", "amizades"): [
-        {"desc": "Mandar mensagem para reconectar com um amigo distante", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Convidar alguém para um café ou atividade essa semana", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Participar de um grupo ou evento social novo", "stat": "resistencia", "points": 3, "nivel": "intermediario", "period": "tarde"},
-    ],
-    ("relacionamentos", "familia"): [
-        {"desc": "Ligar ou visitar um familiar hoje", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Organizar um momento em família na semana", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Ouvir uma história de um familiar mais velho sem interromper", "stat": "foco", "points": 1, "nivel": "todos", "period": "noite"},
-    ],
     ("espiritualidade", "meditacao"): [
         {"desc": "10 minutos de meditação guiada", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "manha"},
         {"desc": "5 minutos de respiração consciente antes de dormir", "stat": "foco", "points": 1, "nivel": "todos", "period": "noite"},
@@ -373,69 +265,6 @@ MISSION_TEMPLATES = {
         {"desc": "Escrever 3 coisas pelas quais é grato hoje", "stat": "criatividade", "points": 1, "nivel": "todos", "period": "noite"},
         {"desc": "Agradecer pessoalmente a alguém específico", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
         {"desc": "Revisar a semana e notar 3 momentos positivos", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "noite"},
-    ],
-    ("arte", "musica"): [
-        {"desc": "20 minutos de prática de {detalhe}", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Aprender um trecho novo de uma música no(a) {detalhe}", "stat": "inteligencia", "points": 2, "nivel": "intermediario", "period": "noite"},
-        {"desc": "Praticar escalas ou técnica básica de {detalhe} por 10 minutos", "stat": "disciplina", "points": 1, "nivel": "iniciante", "period": "manha"},
-        {"desc": "Gravar-se tocando/cantando e ouvir de volta com espírito crítico", "stat": "foco", "points": 2, "nivel": "avancado", "period": "noite"},
-    ],
-    ("arte", "artes_visuais"): [
-        {"desc": "20-30 minutos de {detalhe}", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Estudo de observação: desenhar um objeto real por 15 minutos", "stat": "inteligencia", "points": 2, "nivel": "intermediario", "period": "manha"},
-        {"desc": "Assistir a um tutorial de {detalhe} e reproduzir um exercício", "stat": "disciplina", "points": 1, "nivel": "iniciante", "period": "noite"},
-        {"desc": "Revisar um trabalho antigo e listar 3 pontos de melhoria", "stat": "foco", "points": 2, "nivel": "avancado", "period": "noite"},
-    ],
-    ("arte", "escrita"): [
-        {"desc": "Escrever 300-500 palavras de {detalhe}", "stat": "criatividade", "points": 3, "nivel": "todos", "period": "tarde"},
-        {"desc": "Ler um capítulo de um livro no gênero de {detalhe}", "stat": "inteligencia", "points": 1, "nivel": "todos", "period": "manha"},
-        {"desc": "Revisar e editar um texto já escrito", "stat": "foco", "points": 2, "nivel": "intermediario", "period": "noite"},
-        {"desc": "Compartilhar um texto com alguém para feedback honesto", "stat": "foco", "points": 2, "nivel": "avancado", "period": "noite"},
-    ],
-    ("arte", "teatro_danca"): [
-        {"desc": "20-30 minutos de {detalhe}", "stat": "criatividade", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Aquecimento vocal ou corporal de 10 minutos", "stat": "disciplina", "points": 1, "nivel": "iniciante", "period": "manha"},
-        {"desc": "Gravar um trecho da apresentação e revisar", "stat": "foco", "points": 2, "nivel": "intermediario", "period": "noite"},
-        {"desc": "Participar de uma aula, ensaio ou apresentação de {detalhe}", "stat": "foco", "points": 3, "nivel": "avancado", "period": "tarde"},
-    ],
-    ("social", "oratoria"): [
-        {"desc": "Gravar-se falando por 2 minutos sobre um tema e reassistir", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Praticar uma apresentação em voz alta antes de um compromisso real", "stat": "disciplina", "points": 2, "nivel": "intermediario", "period": "manha"},
-        {"desc": "Ler um parágrafo em voz alta trabalhando ritmo e pausas", "stat": "inteligencia", "points": 1, "nivel": "iniciante", "period": "noite"},
-        {"desc": "Falar sem 'né'/'tipo assim' por 5 minutos numa conversa real", "stat": "foco", "points": 2, "nivel": "avancado", "period": "tarde"},
-    ],
-    ("social", "sintese_didatica"): [
-        {"desc": "Resumir um texto ou vídeo que consumiu hoje em 3 frases", "stat": "inteligencia", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Explicar um conceito que você domina para alguém leigo no assunto", "stat": "foco", "points": 3, "nivel": "intermediario", "period": "tarde"},
-        {"desc": "Escrever a versão 'para uma criança de 10 anos' de uma ideia complexa", "stat": "criatividade", "points": 2, "nivel": "avancado", "period": "manha"},
-        {"desc": "Fazer um mapa mental ou esquema visual de um assunto", "stat": "inteligencia", "points": 1, "nivel": "iniciante", "period": "tarde"},
-    ],
-    ("social", "expandir_circulo"): [
-        {"desc": "Puxar conversa com uma pessoa nova (trabalho, evento, curso)", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Convidar alguém para um café, jogo ou atividade em grupo", "stat": "criatividade", "points": 2, "nivel": "intermediario", "period": "noite"},
-        {"desc": "Participar de um grupo, clube ou comunidade com interesse em comum", "stat": "disciplina", "points": 3, "nivel": "avancado", "period": "tarde"},
-        {"desc": "Reconectar com um conhecido que você não fala há tempos", "stat": "foco", "points": 1, "nivel": "iniciante", "period": "manha"},
-    ],
-    ("social", "carisma"): [
-        {"desc": "Em uma conversa hoje, fazer 2 perguntas genuínas e escutar sem interromper", "stat": "foco", "points": 2, "nivel": "todos", "period": "tarde"},
-        {"desc": "Elogiar algo específico (não genérico) em alguém hoje", "stat": "criatividade", "points": 1, "nivel": "iniciante", "period": "manha"},
-        {"desc": "Contar uma história pessoal de forma estruturada (início, meio, fim)", "stat": "inteligencia", "points": 2, "nivel": "intermediario", "period": "noite"},
-        {"desc": "Observar a linguagem corporal em uma conversa e ajustar a sua", "stat": "foco", "points": 2, "nivel": "avancado", "period": "tarde"},
-    ],
-    ("sono", "qualidade_sono"): [
-        {"desc": "Ir para a cama no mesmo horário de ontem", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Evitar cafeína depois das 16h hoje", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "tarde"},
-        {"desc": "Escurecer e ventilar o quarto antes de dormir", "stat": "resistencia", "points": 1, "nivel": "todos", "period": "noite"},
-    ],
-    ("sono", "rotina_noturna"): [
-        {"desc": "Seguir os mesmos 3 passos da rotina noturna", "stat": "disciplina", "points": 2, "nivel": "todos", "period": "noite"},
-        {"desc": "Separar as roupas/tarefas de amanhã antes de dormir", "stat": "foco", "points": 1, "nivel": "todos", "period": "noite"},
-        {"desc": "Ler algumas páginas em vez de usar telas antes de dormir", "stat": "inteligencia", "points": 1, "nivel": "todos", "period": "noite"},
-    ],
-    ("sono", "energia"): [
-        {"desc": "Pegar 10 minutos de luz solar pela manhã", "stat": "resistencia", "points": 2, "nivel": "todos", "period": "manha"},
-        {"desc": "Fazer uma pausa ativa a cada 2 horas de trabalho", "stat": "foco", "points": 1, "nivel": "todos", "period": "tarde"},
-        {"desc": "Evitar uma soneca longa (>30min) durante o dia", "stat": "disciplina", "points": 1, "nivel": "todos", "period": "tarde"},
     ],
 }
 
@@ -601,61 +430,6 @@ RECOMMENDATIONS = {
                      video_busca("Técnica correta agachamento e supino")],
         "evento": evento("Campeonato local de levantamento de peso amador", "campeonato levantamento de peso amador"),
     },
-    ("financas", "reserva"): {
-        "livros": [livro("Os Segredos da Mente Milionária", "T. Harv Eker")],
-        "conteudo": [video_busca("Como montar reserva de emergência passo a passo"),
-                     video_busca("Onde investir reserva de emergência liquidez diária")],
-        "evento": evento("Palestra de planejamento financeiro", "palestra planejamento financeiro"),
-    },
-    ("financas", "quitar_dividas"): {
-        "livros": [livro("Pai Rico, Pai Pobre", "Robert Kiyosaki")],
-        "conteudo": [video_busca("Como negociar dívidas com banco"),
-                     video_busca("Método bola de neve para quitar dívidas")],
-        "evento": evento("Mutirão de renegociação de dívidas", "mutirão renegociação de dívidas Serasa"),
-    },
-    ("financas", "investir"): {
-        "livros": [livro("O Investidor Inteligente", "Benjamin Graham")],
-        "conteudo": [video_busca("Curso introdutório de investimentos para iniciantes"),
-                     video_busca("Como declarar investimentos no imposto de renda")],
-        "evento": evento("Meetup de investidores iniciantes", "meetup investidores iniciantes"),
-    },
-    ("mental", "foco"): {
-        "livros": [livro("Deep Work", "Cal Newport")],
-        "conteudo": [video_busca("Técnica pomodoro para foco e produtividade"),
-                     video_busca("Como eliminar distrações e procrastinação")],
-        "evento": evento("Workshop de produtividade ou coworking silencioso", "workshop produtividade coworking"),
-    },
-    ("mental", "ansiedade"): {
-        "livros": [livro("O Milagre da Atenção Plena", "Thich Nhat Hanh")],
-        "conteudo": [video_busca("Meditação guiada para ansiedade 10 minutos"),
-                     video_busca("Técnicas de respiração para ansiedade")],
-        "evento": evento("Roda de conversa sobre saúde mental", "roda de conversa saúde mental"),
-    },
-    ("mental", "habito"): {
-        "livros": [livro("Hábitos Atômicos", "James Clear",
-                          link=amazon_link("Hábitos Atômicos James Clear"))],
-        "conteudo": [video_busca("Resumo visual Hábitos Atômicos James Clear"),
-                     video_busca("Como criar hábito consistente ciência")],
-        "evento": evento("Grupo de accountability ou clube de leitura de hábitos", "clube de leitura hábitos accountability"),
-    },
-    ("relacionamentos", "romantico"): {
-        "livros": [livro("As 5 Linguagens do Amor", "Gary Chapman")],
-        "conteudo": [video_busca("Comunicação não violenta em relacionamentos"),
-                     video_busca("Como fortalecer um relacionamento a dois")],
-        "evento": evento("Workshop de casais ou terapia de casal", "workshop casais terapia de casal"),
-    },
-    ("relacionamentos", "amizades"): {
-        "livros": [livro("Como Fazer Amigos e Influenciar Pessoas", "Dale Carnegie")],
-        "conteudo": [video_busca("Como fazer amigos na vida adulta"),
-                     video_busca("Superar timidez em grupos sociais")],
-        "evento": evento("Meetup temático (corrida, jogos, livros)", "meetup temático interesses em comum"),
-    },
-    ("relacionamentos", "familia"): {
-        "livros": [livro("Pais Brilhantes, Professores Fascinantes", "Augusto Cury")],
-        "conteudo": [video_busca("Como melhorar a comunicação em família"),
-                     video_busca("Dinâmica familiar saudável")],
-        "evento": evento("Encontro ou celebração familiar", "encontro familiar"),
-    },
     ("espiritualidade", "meditacao"): {
         "livros": [livro("A Arte da Meditação", "Matthieu Ricard")],
         "conteudo": [video_busca("Meditação guiada iniciantes 10 minutos"),
@@ -673,74 +447,6 @@ RECOMMENDATIONS = {
         "conteudo": [video_busca("Como praticar gratidão diariamente"),
                      video_busca("Diário de gratidão benefícios")],
         "evento": evento("Roda de conversa e reflexão semanal", "roda de conversa reflexão"),
-    },
-    ("arte", "musica"): {
-        "livros": [livro("Teoria Musical para Iniciantes", "Guia Prático")],
-        "conteudo": [video_busca("Aula de teoria musical para iniciantes"),
-                     video_busca("Como praticar instrumento todos os dias")],
-        "evento": evento("Roda de música aberta (jam session)", "jam session roda de música"),
-    },
-    ("arte", "artes_visuais"): {
-        "livros": [livro("Desenhando com o Lado Direito do Cérebro", "Betty Edwards")],
-        "conteudo": [video_busca("Curso de desenho para iniciantes"),
-                     video_busca("Técnicas básicas de pintura e aquarela")],
-        "evento": evento("Feira de arte independente ou workshop de desenho", "feira de arte independente workshop desenho"),
-    },
-    ("arte", "escrita"): {
-        "livros": [livro("On Writing", "Stephen King"),
-                   livro("Como Escrever Bem", "Umberto Eco")],
-        "conteudo": [video_busca("Como desenvolver um projeto de escrita criativa"),
-                     video_busca("Técnicas de storytelling para escritores")],
-        "evento": evento("Sarau literário ou clube de escrita", "sarau literário clube de escrita"),
-    },
-    ("arte", "teatro_danca"): {
-        "livros": [livro("Um Ator Se Prepara", "Constantin Stanislavski")],
-        "conteudo": [video_busca("Aula de teatro para iniciantes"),
-                     video_busca("Aula de dança para iniciantes")],
-        "evento": evento("Grupo amador de teatro ou aula de dança", "grupo amador teatro aula de dança"),
-    },
-    ("social", "oratoria"): {
-        "livros": [livro("Fale Bem em Público", "Reinaldo Polito")],
-        "conteudo": [video_busca("Técnicas de oratória para falar em público"),
-                     video_busca("Como perder o medo de falar em público")],
-        "evento": evento("Grupo local de oratória e debate (Toastmasters)", "toastmasters clube de oratória"),
-    },
-    ("social", "sintese_didatica"): {
-        "livros": [livro("Made to Stick", "Chip e Dan Heath")],
-        "conteudo": [video_busca("Como explicar assuntos complexos de forma simples"),
-                     video_busca("Técnica Feynman de aprendizado")],
-        "evento": evento("Grupo de estudos para ensinar um tópico", "grupo de estudos"),
-    },
-    ("social", "expandir_circulo"): {
-        "livros": [livro("Como Fazer Amigos e Influenciar Pessoas", "Dale Carnegie")],
-        "conteudo": [video_busca("Como expandir seu círculo social na vida adulta"),
-                     video_busca("Apps para conhecer pessoas com interesses em comum")],
-        "evento": evento("Meetup temático (corrida, jogos, livros)", "meetup temático interesses em comum"),
-    },
-    ("social", "carisma"): {
-        "livros": [livro("Como Fazer Amigos e Influenciar Pessoas", "Dale Carnegie")],
-        "conteudo": [video_busca("Linguagem corporal e escuta ativa"),
-                     video_busca("Como ser mais carismático")],
-        "evento": evento("Workshop de comunicação interpessoal", "workshop comunicação interpessoal"),
-    },
-    ("sono", "qualidade_sono"): {
-        "livros": [livro("Por Que Nós Dormimos", "Matthew Walker")],
-        "conteudo": [video_busca("Como melhorar a qualidade do sono ciência"),
-                     video_busca("Higiene do sono dicas práticas")],
-        "evento": evento("Consulta com especialista em sono", "clínica do sono consulta"),
-    },
-    ("sono", "rotina_noturna"): {
-        "livros": [livro("Hábitos Atômicos", "James Clear",
-                          link=amazon_link("Hábitos Atômicos James Clear"))],
-        "conteudo": [video_busca("Rotina noturna saudável antes de dormir"),
-                     video_busca("Sons relaxantes para dormir playlist")],
-        "evento": evento("Nenhum evento específico — o foco aqui é a consistência diária", "rotina de sono saudável"),
-    },
-    ("sono", "energia"): {
-        "livros": [livro("Por Que Nós Dormimos", "Matthew Walker")],
-        "conteudo": [video_busca("Luz solar e ritmo circadiano energia"),
-                     video_busca("Como ter mais energia durante o dia")],
-        "evento": evento("Check-up médico geral, se a fadiga persistir", "check-up médico geral"),
     },
 }
 

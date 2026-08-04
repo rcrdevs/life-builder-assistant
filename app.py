@@ -986,10 +986,61 @@ def _insert_missions(db, user_id, plan):
         )
 
 
+def _build_ai_history(db, user):
+    """Monta o historico do ciclo anterior (adesao as missoes, checkpoint --
+    autoavaliacao vs. progresso medido --, e desempenho em quiz), por area,
+    usado para enriquecer a nota de estrategia por IA (ver
+    ai.build_profile_summary). Nao gera nenhuma chamada de IA nova: so le
+    dados que ja ficam salvos em `missions`/`checkpoint_history` quando o
+    usuario usa o app normalmente. Ciclo anterior = current_cycle - 1; se nao
+    existir ainda (primeiro ciclo do usuario), volta {} e a nota fica baseada
+    so no perfil, como antes."""
+    prev_cycle = (user["current_cycle"] or 1) - 1
+    if prev_cycle < 1:
+        return {}
+
+    history = {}
+
+    adherence_rows = db.execute(
+        "SELECT area, COUNT(*) total, "
+        "SUM(CASE WHEN completion_pct IS NOT NULL THEN 1 ELSE 0 END) logged "
+        "FROM missions WHERE user_id=? AND cycle=? AND area != 'rotina' AND goal != 'dieta' "
+        "GROUP BY area",
+        (user["id"], prev_cycle),
+    ).fetchall()
+    for r in adherence_rows:
+        if r["total"]:
+            history.setdefault(r["area"], {})["adherence_pct"] = 100.0 * r["logged"] / r["total"]
+
+    checkpoint_rows = db.execute(
+        "SELECT area, self_rating, measured_progress, new_progress "
+        "FROM checkpoint_history WHERE user_id=? AND cycle=?",
+        (user["id"], prev_cycle),
+    ).fetchall()
+    for r in checkpoint_rows:
+        # se a area tiver mais de um objetivo, fica o ultimo lido -- aproximacao
+        # aceitavel pro contexto do prompt (nao muda o calculo de progresso real).
+        history.setdefault(r["area"], {})["checkpoint"] = {
+            "self_rating": r["self_rating"], "measured": r["measured_progress"], "new_progress": r["new_progress"],
+        }
+
+    quiz_rows = db.execute(
+        "SELECT area, AVG(completion_pct) avg_pct FROM missions "
+        "WHERE user_id=? AND cycle=? AND action LIKE 'quiz%%' AND completion_pct IS NOT NULL "
+        "GROUP BY area",
+        (user["id"], prev_cycle),
+    ).fetchall()
+    for r in quiz_rows:
+        if r["avg_pct"] is not None:
+            history.setdefault(r["area"], {})["quiz_avg_pct"] = r["avg_pct"]
+
+    return history
+
+
 def _update_ai_strategy(user):
     """Gera (se a Groq estiver configurada e houver cota) uma nota curta de
-    estrategia personalizada e salva em extra_info. Falha silenciosamente --
-    a build funciona 100% sem isso.
+    estrategia por area (ver ai.generate_strategy_note) e salva em
+    extra_info. Falha silenciosamente -- a build funciona 100% sem isso.
 
     Contas-convidado (modo teste) NUNCA disparam chamada de IA: a chave da
     Groq/DeepSeek e unica e compartilhada por todo o app (ver ai.py), entao
@@ -1007,13 +1058,14 @@ def _update_ai_strategy(user):
     account = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
     if not ai_billing.has_quota(account):
         return
-    summary = ai.build_profile_summary(user, area_label, area_goals_label)
-    note, usage = ai.generate_strategy_note(summary)
+    history = _build_ai_history(db, user)
+    summary = ai.build_profile_summary(user, area_label, area_goals_label, history=history)
+    notes, usage = ai.generate_strategy_note(summary, user["areas"])
     if usage:
         ai_billing.record_usage(db, account_id, user["id"], "groq", ai.GROQ_MODEL, "strategy_note", usage)
-    if note:
+    if notes:
         extra_info = dict(user["extra_info"])
-        extra_info["ai_strategy"] = note
+        extra_info["ai_strategy"] = notes
         db.execute("UPDATE users SET extra_info=? WHERE id=?", (json.dumps(extra_info), user["id"]))
         db.commit()
 
@@ -1224,7 +1276,10 @@ def dashboard():
         show_rest_message=show_rest_message,
         area_label_fn=area_label,
         goal_label_fn=goal_label,
-        ai_strategy=user["extra_info"].get("ai_strategy"),
+        # dict {area: nota} (ver ai.generate_strategy_note); contas antigas
+        # podem ter salvo um paragrafo unico (string) na versao anterior --
+        # ignora nesse caso em vez de quebrar o template.
+        ai_strategy=(lambda v: v if isinstance(v, dict) else None)(user["extra_info"].get("ai_strategy")),
         ai_configured=ai.ai_available(),
         ai_quota=(ai_billing.get_quota(
             db.execute("SELECT * FROM accounts WHERE id=?", (session.get("account_id"),)).fetchone()

@@ -1,11 +1,13 @@
-# Life Builder Assistant — Protótipo v0.6
+# Life Builder Assistant — Protótipo v0.7
 
-Um "RPG da vida real" com conta de usuário: você pode escolher **mais de um
-objetivo por área**, detalhar objetivos específicos (qual concurso, qual idioma,
-qual instrumento...), resolver simulados dentro do próprio app, e receber
-recomendações com links reais de compra/vídeo/evento. Ao fim de cada ciclo de 14
-dias, o app pergunta como você *sente* que foi seu progresso e recalibra o ciclo
-seguinte. Opcionalmente, a Groq gera uma estratégia personalizada por IA.
+Um "RPG da vida real" com conta de usuário, focado em 4 áreas — **Profissional,
+Estudos, Saúde e Espiritualidade** — onde você pode escolher **mais de um
+objetivo por área**, detalhar objetivos específicos (qual concurso, qual idioma...),
+resolver simulados dentro do próprio app, e receber recomendações com links reais
+de compra/vídeo/evento. Ao fim de cada ciclo de 14 dias, o app pergunta como você
+*sente* que foi seu progresso e recalibra o ciclo seguinte. Opcionalmente, a Groq
+gera uma nota de estratégia por área a cada ciclo, já considerando o histórico
+(adesão, autoavaliação, desempenho em quiz) do ciclo anterior.
 
 ## Como rodar
 
@@ -39,98 +41,90 @@ criadas/migradas automaticamente na primeira conexão.
 
 ## O que mudou nesta versão
 
-### 1. Seleção múltipla de objetivos (Passo II)
-Cada área agora usa checkboxes em vez de um único radio — dá para escolher, por
-exemplo, "Passar em concurso" e "Conseguir uma promoção" dentro de Profissional
-ao mesmo tempo. Cada combinação (área, objetivo) ganha sua própria barra de
-progresso, seu conjunto de missões e suas próprias recomendações.
+### 1. Escopo reduzido a 4 áreas
+O produto passou de 10 áreas rasas para 4 áreas com identidade mais clara:
+**Profissional, Estudos, Saúde e Espiritualidade**. Finanças, Mente & Foco,
+Relacionamentos, Arte, Social e Sono & Descanso foram **removidas do código**
+(não só escondidas) — `data.py` não tem mais entradas de `AREAS`, `GOALS`,
+`MISSION_TEMPLATES` nem `RECOMMENDATIONS` para elas. O registro diário de sono
+(feito pelo assistente flutuante, tabela `sleep_logs`) é independente dessa
+área e continua funcionando normalmente.
 
-### 2. Objetivos personalizáveis com detalhe específico
-Objetivos como concurso público, vaga de emprego, idioma, bolsa, intercâmbio,
-maratona e as aptidões de Arte agora perguntam um detalhe extra assim que
-selecionados (ex.: "Qual concurso público?"). Esse texto substitui `{detalhe}`
-nas descrições de missão que o usam — por exemplo, "Resolver 15 questões de
-matéria objetiva do Concurso INSS 2026" em vez de um genérico "do edital".
+**Limitação conhecida**: contas de teste antigas que tenham salvo uma dessas
+áreas removidas não são migradas — `area_label`/`goal_label` caem num
+fallback (mostram a chave crua) em vez de quebrar a página, mas o ideal é
+recriar a build nessas contas.
 
-### 3. Simulado in-app (quiz)
-Missões de resolução de questões de concurso (`action: "quiz"`) agora têm um
-botão "Resolver questões →" que abre um simulado dentro do próprio app: 5
-questões de múltipla escolha, correção imediata com gabarito e a fonte de cada
-questão, e o resultado (% de acerto) já é registrado automaticamente como a
-conclusão da missão.
+### 2. IA estruturada por área, sem aumentar o custo por chamada
+A nota de estratégia (Groq, `ai.generate_strategy_note`) continua sendo **1
+chamada por ciclo de 14 dias por conta** — não por missão, não por dia — pra
+manter o teste grátis (`FREE_TRIAL_AI_TOKENS`, ver `ai_billing.py`) viável.
+O que mudou é o conteúdo dessa chamada: agora ela recebe o histórico do ciclo
+anterior (adesão às missões, autoavaliação do checkpoint vs. progresso
+medido, desempenho em quiz — tudo já salvo em `missions`/`checkpoint_history`,
+montado por `app._build_ai_history`) e devolve uma nota curta **por área
+ativa** em JSON, em vez de um parágrafo único e genérico. O dashboard mostra
+essa nota junto de cada área.
 
-**Nota de honestidade sobre o conteúdo do quiz**: as questões em
-`data.QUIZ_BANK` são questões-modelo que eu escrevi no estilo típico de
-bancas de concurso (Português, Direito Constitucional, Raciocínio Lógico,
-Administrativo, Informática) — não são questões verbatim de um edital real
-específico. Não haveria como verificar/atribuir com precisão um "Edital X, Ano
-Y" real para o concurso que cada usuário for digitar sem uma pesquisa dedicada
-por caso, então preferi ser honesto sobre a origem em vez de inventar uma
-citação falsa. A arquitetura (`engine.pick_quiz_questions`/`grade_quiz`,
-`data.QUIZ_BANK`) já está pronta para receber bancos de questões reais e
-verificadas no futuro, inclusive por outra área/objetivo além de concurso.
+O quiz por IA (DeepSeek, já existia para `profissional/concurso`) foi
+estendido para `estudos/idioma` reaproveitando 100% da infraestrutura
+existente (`ai.generate_quiz_questions`, cache em `ai_quiz_cache`) — só
+adicionou `action: "quiz:5"` numa mission template. Saúde e Espiritualidade
+não ganharam quiz de propósito: não fazem sentido em múltipla escolha, e
+forçar isso seria custo de IA sem valor real.
 
-### 4. Recomendações com links reais
-Livros, vídeos e eventos agora têm links funcionais:
-- Livros: para a maioria, um link de busca real na Amazon Brasil (sempre
-  funcional, mostra o preço atual na própria loja). Para 3 livros específicos
-  (verificados via busca), um link direto ao produto certo.
-- Vídeos: link de busca real no YouTube para a maioria; para "Hábitos
-  Atômicos" (mental/habito), um vídeo específico verificado com thumbnail real.
-- Eventos: link de busca real no Sympla.
+### 3. Ponto de extensão para gerador de cursos (não integrado ainda)
+`learner_context.py` é um módulo novo, não chamado por nenhuma rota hoje. Ele
+monta o contexto de aprendizado de um objetivo específico do usuário (nível,
+detalhe digitado, progresso, desempenho em quiz) no formato que uma futura
+integração com um gerador de cursos personalizados (outro projeto do mesmo
+autor) precisaria. Fica pronto pra ser exposto por uma rota autenticada
+quando o contrato entre os dois projetos existir — até lá, zero custo, zero
+tabela nova.
 
-Assumo aqui uma limitação parecida com a do quiz: verificar manualmente preço e
-link exato de ~40 livros/vídeos individuais está fora do escopo razoável deste
-protótipo — por isso a maioria usa links de busca (100% reais e funcionais, só
-não fixados em um produto/vídeo específico) em vez de dados fabricados. Também
-corrigi uma atribuição errada que eu tinha inventado antes ("Como se preparar
-para concursos, de Carlos Henrique Vieira" não existe — o livro real é de
-Rogério Neiva).
+## Onboarding (recapitulando)
 
-### 5. Bustos removidos
-Você pediu um modelo 3D de verdade; se não desse, para tirar. Não tenho como
-gerar ou obter malhas 3D reais dos bustos de Aristóteles/Da Vinci/etc. neste
-ambiente (sem acesso a repositórios de modelos 3D, e eu não fabricaria um
-"modelo 3D genérico" fingindo ser uma pessoa específica). Como a versão em foto
-2D girando também não atendeu, removi a funcionalidade por completo em vez de
-manter uma versão que você já disse não gostar.
-
-## Onboarding (recapitulando, com as mudanças desta versão)
-
-1. Áreas — multi-seleção + "Outro" (diálogo modal).
-2. Objetivos — agora multi-seleção por área (checkboxes) + "Outro" (diálogo
-   modal) + campo de detalhe para objetivos personalizáveis.
+1. Áreas — multi-seleção entre as 4 áreas + "Outro" (diálogo modal).
+2. Objetivos — multi-seleção por área (checkboxes) + "Outro" (diálogo modal)
+   + campo de detalhe para objetivos personalizáveis.
    - Se nenhuma área de saúde for escolhida, o passo Paideia aparece antes.
 3. Medidas, pesos e dieta — inalterado.
-4. Panorama — agora mostra uma linha por objetivo (não por área), incluindo o
+4. Panorama — mostra uma linha por objetivo (não por área), incluindo o
    detalhe personalizado quando houver.
 
 ## Arquitetura (arquivos)
 
-- `data.py` — inclui `GOALS_NEEDING_DETAIL` (quais objetivos pedem detalhe),
-  `QUIZ_BANK` (banco de questões-modelo), e os helpers de link real
-  (`amazon_link`, `youtube_search_link`, `youtube_video`, `sympla_search_link`)
-  usados para montar `RECOMMENDATIONS`.
-- `engine.py` — `generate_plan` agora recebe `goal_details` e substitui
-  `{detalhe}` nas descrições; `pick_quiz_questions`/`grade_quiz` para o
-  simulado.
-- `app.py` — `user["goals"]` agora é `area -> [lista de objetivos]` (era um
-  único objetivo por área); `flat_goal_pairs()` achata isso onde precisa de
-  pares `(area, objetivo)`. Rotas novas: `/quiz/<mission_id>` (GET mostra as
-  questões, POST corrige e registra).
+- `data.py` — `AREAS`/`GOALS`/`MISSION_TEMPLATES`/`RECOMMENDATIONS` cobrem só
+  as 4 áreas ativas; `GOALS_NEEDING_DETAIL` (quais objetivos pedem detalhe);
+  `QUIZ_BANK` (banco de questões-modelo, fallback estático quando a IA não
+  está disponível).
+- `engine.py` — `generate_plan` recebe `goal_details` e substitui `{detalhe}`
+  nas descrições; `pick_quiz_questions`/`grade_quiz` para o simulado. Sem
+  chamada de IA — tudo determinístico.
+- `ai.py` — `build_profile_summary` (agora aceita `history` opcional) e
+  `generate_strategy_note` (agora devolve um dict `{area: nota}`, pedindo
+  saída em JSON à Groq) para a nota de estratégia; `generate_quiz_questions`
+  (DeepSeek) para o quiz gerado por IA.
+- `app.py` — `_build_ai_history` monta o histórico do ciclo anterior por
+  área; `_update_ai_strategy` chama a IA e salva o dict em
+  `extra_info["ai_strategy"]`. Rotas de quiz: `/quiz/<mission_id>` (GET
+  mostra as questões, POST corrige e registra).
+- `learner_context.py` — ponto de extensão (não roteado) para a futura
+  integração com o gerador de cursos.
 - `templates/quiz.html`, `templates/quiz_result.html` — telas do simulado.
 
 ## Limitações conhecidas / próximos passos sugeridos
 
-- Quiz: só existe para `(profissional, concurso)` por enquanto, com questões-
-  modelo (não verbatim de edital real) — ver nota de honestidade acima.
-  Expandir para outros objetivos (idioma, vestibular) é o próximo passo
-  natural, assim como trocar por um banco de questões real/licenciado se
-  disponível.
+- Quiz por IA: existe para `(profissional, concurso)` e `(estudos, idioma)`.
+  Questões do `QUIZ_BANK` estático (fallback sem IA) só cobrem concurso, com
+  questões-modelo (não verbatim de edital real) — a fonte de cada questão
+  deixa isso explícito na tela.
+- Contas antigas com áreas removidas (Finanças/Mental/Relacionamentos/Arte/
+  Social/Sono) não são migradas automaticamente — ver nota acima.
 - Recomendações: a maioria usa links de busca (reais, mas não fixados num
-  produto específico) em vez de preço/link exato verificado a mão — ver nota
-  acima.
-- Sem bustos: removidos por não haver como entregar 3D real (ver nota acima).
-- Demais limitações já documentadas nas versões anteriores (correspondência
-  treino↔missão por palavra-chave, variedade do pool de missões secundárias)
-  continuam valendo.
+  produto específico) em vez de preço/link exato verificado a mão.
+- Nota de estratégia por IA: o histórico usado hoje é só do ciclo
+  imediatamente anterior (não a série completa) — olhar mais ciclos pra trás
+  é o próximo passo natural se isso se mostrar valioso na prática.
+- `learner_context.py` ainda não está exposto por nenhuma rota — falta
+  definir o contrato com o outro projeto (gerador de cursos) antes disso.

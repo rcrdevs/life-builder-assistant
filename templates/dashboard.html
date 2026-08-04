@@ -28,7 +28,13 @@
 {% if ai_strategy %}
 <div class="lb-ai-note">
     <span class="lb-ai-note__tag">Estratégia personalizada · IA</span>
-    <p>{{ ai_strategy }}</p>
+    <ul class="lb-ai-note__list">
+        {% for area in user.areas %}
+            {% if ai_strategy.get(area) %}
+            <li><strong>{{ area_label_fn(user, area) }}:</strong> {{ ai_strategy.get(area) }}</li>
+            {% endif %}
+        {% endfor %}
+    </ul>
 </div>
 {% elif is_guest %}
 <div class="lb-ai-note lb-ai-note--muted">

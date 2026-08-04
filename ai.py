@@ -20,7 +20,10 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 TIMEOUT_SECONDS = 12
-MAX_TOKENS = 260
+# 260 chegava pra 1 paragrafo generico; agora a nota tem 1 entrada curta por
+# area ativa (ate 4 areas) dentro de um JSON, entao precisa de um pouco mais
+# de espaco -- ainda uma fracao de centavo por chamada no preco da Groq.
+MAX_TOKENS = 420
 
 # DeepSeek gera as questoes de quiz personalizadas por tema (missoes tipo
 # "concurso"/estudo com um assunto especifico digitado pelo usuario). Usamos
@@ -121,14 +124,29 @@ def generate_quiz_questions(topic, n=10):
             ValueError, TimeoutError, TypeError):
         return None, usage
 
-SYSTEM_PROMPT = (
-    "Voce e um assistente de planejamento pessoal direto e objetivo, no estilo de um "
-    "treinador experiente. Responda em portugues do Brasil, em no maximo 5 frases "
-    "curtas, sem listas, sem markdown, sem saudacao. Foque em: (1) como equilibrar as "
-    "areas escolhidas dado o tempo disponivel e o peso que o usuario deu a cada uma, "
-    "(2) um ajuste pratico especifico se houver alguma restricao/observacao do "
-    "usuario (lesao, rotina, preferencia), e (3) uma dica concreta para o primeiro "
-    "ciclo de 14 dias. Nao invente dados que nao foram informados."
+# Nota de estrategia: 1 chamada Groq por ciclo (14 dias) por conta -- nunca por
+# missao/dia. Para dar a sensacao real de "IA que acompanha a evolucao" sem
+# aumentar a frequencia de chamadas (o que quebraria o modelo de custo do
+# teste gratis), a mesma chamada agora recebe o historico do ciclo anterior
+# (adesao, autoavaliacao vs. progresso medido, desempenho em quiz -- tudo já
+# armazenado pelo app) e devolve uma nota curta POR AREA em JSON, em vez de um
+# unico paragrafo generico.
+STRATEGY_SYSTEM_PROMPT = (
+    "Voce e um treinador de desenvolvimento pessoal direto e objetivo, em "
+    "portugues do Brasil. Voce recebe um resumo do perfil do usuario, com o "
+    "nivel/peso de cada area e, quando disponivel, o historico do ciclo "
+    "anterior (adesao as missoes, autoavaliacao do usuario vs. progresso "
+    "medido, desempenho em quizzes). Responda APENAS com um JSON valido (sem "
+    "markdown, sem texto fora do JSON): um objeto cujas chaves sao exatamente "
+    "as areas listadas no perfil (ex.: \"profissional\", \"estudos\", \"saude\", "
+    "\"espiritualidade\") e cujos valores sao uma nota curta (no maximo 2 "
+    "frases, sem saudacao, sem markdown) com um conselho pratico e especifico "
+    "para o proximo ciclo de 14 dias naquela area -- usando o historico "
+    "quando ele existir (ex.: elogiar adesao alta, sugerir um ajuste se a "
+    "adesao caiu, comentar a diferenca entre autoavaliacao e progresso "
+    "medido). Se nao houver historico para uma area, de um conselho baseado "
+    "so no nivel/peso/objetivo. Nao inclua areas fora da lista recebida. Nao "
+    "invente dados que nao foram informados."
 )
 
 
@@ -136,20 +154,43 @@ def ai_available():
     return bool(GROQ_API_KEY)
 
 
-def build_profile_summary(user, area_label_fn, area_goals_label_fn):
+def build_profile_summary(user, area_label_fn, area_goals_label_fn, history=None):
     """Resume o perfil do usuario em poucas linhas -- mantem o prompt pequeno e
-    barato, evitando mandar o plano de missoes inteiro para a IA."""
+    barato, evitando mandar o plano de missoes inteiro para a IA.
+
+    `history`: dict opcional area -> {"adherence_pct": float|None,
+    "checkpoint": {"self_rating": int, "measured": float, "new_progress": float}|None,
+    "quiz_avg_pct": float|None}, montado pelo app.py a partir de
+    checkpoint_history/missions/ai_quiz_cache do ciclo anterior. Sem isso
+    (ex.: primeiro ciclo do usuario), a nota fica baseada so no perfil."""
     lines = [f"Nome: {user['nome']}"]
+    history = history or {}
     for area in user["areas"]:
         goals = user["goals"].get(area) or []
         if not goals:
             continue
         nivel = user["niveis"].get(area, "iniciante")
         peso = user["pesos"].get(area, 3)
-        lines.append(
+        line = (
             f"- {area_label_fn(user, area)}: {area_goals_label_fn(user, area)} "
             f"(nivel {nivel}, peso {peso}/5)"
         )
+        h = history.get(area)
+        if h:
+            extra = []
+            if h.get("adherence_pct") is not None:
+                extra.append(f"adesão do último ciclo: {h['adherence_pct']:.0f}%")
+            cp = h.get("checkpoint")
+            if cp:
+                extra.append(
+                    f"autoavaliação {cp['self_rating']}/10, progresso medido "
+                    f"{cp['measured']:.0f}% → {cp['new_progress']:.0f}%"
+                )
+            if h.get("quiz_avg_pct") is not None:
+                extra.append(f"desempenho médio em quiz: {h['quiz_avg_pct']:.0f}%")
+            if extra:
+                line += " [histórico do ciclo anterior: " + "; ".join(extra) + "]"
+        lines.append(line)
     tempo = user["basic_info"].get("tempo_livre_min")
     if tempo:
         lines.append(f"Tempo livre de foco por dia: {tempo} minutos (o resto ate 8h vira missoes leves).")
@@ -161,23 +202,25 @@ def build_profile_summary(user, area_label_fn, area_goals_label_fn):
     return "\n".join(lines)
 
 
-def generate_strategy_note(profile_summary):
-    """Retorna uma tupla (nota, usage). `nota` e um paragrafo curto de
-    estrategia personalizada, ou None se a IA nao estiver disponivel/
-    configurada ou a chamada falhar (o app segue funcionando normalmente sem
-    essa nota em qualquer um desses casos). `usage` e o dict de tokens da
-    API (ou None se a chamada nao chegou a acontecer/retornar)."""
-    if not GROQ_API_KEY or not profile_summary:
+def generate_strategy_note(profile_summary, area_keys):
+    """Retorna uma tupla (notes, usage). `notes` e um dict {area_key: texto}
+    com uma nota curta por area ativa, ou None se a IA nao estiver
+    disponivel/configurada, `area_keys` vier vazio, ou a chamada falhar (o
+    app segue funcionando normalmente sem essas notas em qualquer um desses
+    casos). `usage` e o dict de tokens da API (ou None se a chamada nao
+    chegou a acontecer/retornar)."""
+    if not GROQ_API_KEY or not profile_summary or not area_keys:
         return None, None
 
     body = json.dumps({
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
             {"role": "user", "content": profile_summary},
         ],
         "max_tokens": MAX_TOKENS,
         "temperature": 0.6,
+        "response_format": {"type": "json_object"},
     }).encode("utf-8")
 
     req = urllib.request.Request(
@@ -187,6 +230,15 @@ def generate_strategy_note(profile_summary):
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"].strip(), data.get("usage")
-    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError, ValueError, TimeoutError):
+        raw = data["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None, data.get("usage")
+        notes = {
+            k: v.strip() for k, v in parsed.items()
+            if k in area_keys and isinstance(v, str) and v.strip()
+        }
+        return (notes or None), data.get("usage")
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError,
+            ValueError, TimeoutError, TypeError, AttributeError):
         return None, None

@@ -827,6 +827,9 @@ input:focus, select:focus, textarea:focus, button:focus, .lb-radio-pill:focus-wi
     text-transform: uppercase; color: var(--neon-bright); margin-bottom: 6px;
 }
 .lb-ai-note p { margin: 0; color: var(--text); line-height: 1.5; }
+.lb-ai-note__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.lb-ai-note__list li { color: var(--text); line-height: 1.5; }
+.lb-ai-note__list strong { color: var(--neon-bright); font-weight: 600; }
 .lb-ai-note--muted { border-color: var(--line); box-shadow: none; }
 .lb-ai-note--muted .lb-ai-note__tag { color: var(--text-dim); }
 .lb-ai-note--muted p { color: var(--text-dim); }
