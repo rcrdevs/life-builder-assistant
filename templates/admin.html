@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Diagnóstico{% endblock %}
+{% block header_extra %}
+<div class="lb-header-actions">
+    <a href="{{ url_for('dashboard') }}" class="lb-btn lb-btn--ghost lb-btn--sm">← Painel</a>
+</div>
+{% endblock %}
+{% block content %}
+<section class="lb-onboard lb-onboard--wide">
+    <p class="lb-eyebrow">Administração</p>
+    <h1 class="lb-title lb-title--md">Diagnóstico das integrações</h1>
+    <p class="lb-lede">
+        Todo serviço externo daqui falha em silêncio de propósito — se a IA cai, o usuário recebe o
+        plano determinístico em vez de um erro. Isso protege o usuário e esconde o problema de você.
+        Este teste faz a pergunta direta: <strong>esse provedor responde agora?</strong>
+    </p>
+
+    <form method="post" action="{{ url_for('admin_panel') }}" class="lb-admin-run">
+        <button type="submit" class="lb-btn lb-btn--primary">Testar integrações agora →</button>
+        <span class="lb-hint">Cada teste faz uma chamada real e leva alguns segundos.</span>
+    </form>
+
+    {% if probes %}
+    <h2 class="lb-panel-title">Resultado do teste</h2>
+    <div class="lb-admin-probes">
+        {% for nome, r in probes %}
+        <div class="lb-admin-probe lb-admin-probe--{{ 'ok' if r.ok else ('off' if r.ok is none else 'erro') }}">
+            <div class="lb-admin-probe__head">
+                <span class="lb-admin-probe__status">{{ '✓' if r.ok else ('—' if r.ok is none else '✕') }}</span>
+                <span class="lb-admin-probe__nome">{{ nome }}</span>
+            </div>
+            <p class="lb-admin-probe__detalhe">{{ r.detalhe }}</p>
+            {% if r.saldo is defined %}
+            <p class="lb-admin-probe__extra">Saldo: {{ r.saldo }}{% if not r.saldo_disponivel %} (indisponível){% endif %}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h2 class="lb-panel-title">Configuração</h2>
+    <div class="lb-admin-table-wrap">
+        <table class="lb-admin-table">
+            <thead><tr><th>Variável</th><th>Definida</th><th>Modelo / host</th></tr></thead>
+            <tbody>
+                {% for nome, definida, extra in config %}
+                <tr>
+                    <td><code>{{ nome }}</code></td>
+                    <td class="{{ 'lb-admin-yes' if definida else 'lb-admin-no' }}">{{ 'sim' if definida else 'não' }}</td>
+                    <td>{{ extra }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="lb-panel-title">Fila de jobs</h2>
+    <p class="lb-admin-counts">
+        {% for status in ['pending', 'running', 'done', 'failed'] %}
+        <span class="lb-admin-count"><strong>{{ jobs_por_status.get(status, 0) }}</strong> {{ status }}</span>
+        {% endfor %}
+    </p>
+    {% if jobs_falhos %}
+    <div class="lb-admin-table-wrap">
+        <table class="lb-admin-table">
+            <thead><tr><th>#</th><th>Tipo</th><th>Tentativas</th><th>Erro</th><th>Quando</th></tr></thead>
+            <tbody>
+                {% for j in jobs_falhos %}
+                <tr>
+                    <td>{{ j.id }}</td><td>{{ j.job_type }}</td><td>{{ j.attempts }}</td>
+                    <td class="lb-admin-erro">{{ (j.error or '')[:120] }}</td>
+                    <td>{{ (j.updated_at or '')[:16] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="lb-hint">Nenhum job falho.</p>
+    {% endif %}
+
+    <h2 class="lb-panel-title">Consumo de IA</h2>
+    {% if uso_ia %}
+    <div class="lb-admin-table-wrap">
+        <table class="lb-admin-table">
+            <thead><tr><th>Provedor</th><th>Modelo</th><th>Uso</th><th>Chamadas</th><th>Tokens</th><th>Custo (US$)</th><th>Última</th></tr></thead>
+            <tbody>
+                {% for u in uso_ia %}
+                <tr>
+                    <td>{{ u.provider }}</td><td>{{ u.model }}</td><td>{{ u.purpose }}</td>
+                    <td>{{ u.chamadas }}</td><td>{{ u.tokens or 0 }}</td>
+                    <td>{{ '%.4f'|format(u.custo or 0) }}</td><td>{{ (u.ultima or '')[:16] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="lb-hint">Nenhuma chamada de IA registrada ainda.</p>
+    {% endif %}
+
+    <h2 class="lb-panel-title">Uso do produto</h2>
+    <p class="lb-admin-counts">
+        <span class="lb-admin-count"><strong>{{ contas.total or 0 }}</strong> contas</span>
+        <span class="lb-admin-count"><strong>{{ contas.convidados or 0 }}</strong> convidados</span>
+        <span class="lb-admin-count"><strong>{{ contas.pagantes or 0 }}</strong> pagantes</span>
+        <span class="lb-admin-count"><strong>{{ builds.total or 0 }}</strong> builds</span>
+        <span class="lb-admin-count"><strong>{{ builds.completas or 0 }}</strong> com onboarding completo</span>
+        <span class="lb-admin-count"><strong>{{ provas.total or 0 }}</strong> provas semanais</span>
+        <span class="lb-admin-count"><strong>{{ provas.respondidas or 0 }}</strong> respondidas</span>
+    </p>
+
+    {% if quiz_fontes %}
+    <p class="lb-hint">
+        Origem dos quizzes gerados:
+        {% for q in quiz_fontes %}<strong>{{ q.total }}</strong> {{ q.source }}{{ ', ' if not loop.last }}{% endfor %}.
+        Muitos <code>banco_estatico</code> significa que a IA estava indisponível quando eles foram abertos.
+    </p>
+    {% endif %}
+</section>
+{% endblock %}

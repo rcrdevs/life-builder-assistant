@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Life Builder — Página não encontrada{% endblock %}
+{% block content %}
+<section class="lb-onboard">
+    <p class="lb-eyebrow">404</p>
+    <h1 class="lb-title">Essa página não existe.</h1>
+    <p class="lb-lede">O link pode estar errado ou a página pode ter mudado de lugar.</p>
+    <a href="{{ url_for('index') }}" class="lb-btn lb-btn--primary">Voltar ao início →</a>
+</section>
+{% endblock %}

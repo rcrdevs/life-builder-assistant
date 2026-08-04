@@ -31,6 +31,8 @@ services:
         sync: false
       - key: YOUTUBE_API_KEY
         sync: false
+      - key: ADMIN_EMAILS
+        sync: false
       - key: DB_POOL_MIN
         value: "1"
       - key: DB_POOL_MAX

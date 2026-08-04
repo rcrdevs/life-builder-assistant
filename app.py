@@ -41,6 +41,7 @@ import ai
 import ai_billing
 import billing
 import email_sender
+import diagnostics
 import jobs
 import youtube_api
 from ai_billing import FREE_TRIAL_AI_TOKENS
@@ -85,7 +86,26 @@ def inject_session_flags():
         "is_guest": bool(session.get("is_guest")),
         "google_client_id": GOOGLE_CLIENT_ID if GOOGLE_LOGIN_ENABLED else "",
         "show_assistant": bool(session.get("user_id")),
+        "is_admin": _session_is_admin(),
     }
+
+
+def _session_is_admin():
+    """Usado so pra decidir se o link do painel aparece no cabecalho. A
+    protecao de verdade e o @admin_required na rota -- esconder o link nunca
+    e controle de acesso.
+
+    Roda em todo request (context processor), entao: sem ADMIN_EMAILS
+    configurado nem toca no banco, e quando toca guarda o resultado em `g`
+    pra nao repetir a query em outros pontos do mesmo request."""
+    if not ADMIN_EMAILS or not session.get("account_id") or session.get("is_guest"):
+        return False
+    if "is_admin" not in g:
+        row = get_db().execute(
+            "SELECT email FROM accounts WHERE id=?", (session["account_id"],)
+        ).fetchone()
+        g.is_admin = bool(row and (row["email"] or "").lower() in ADMIN_EMAILS)
+    return g.is_admin
 
 DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_PORT = int(os.environ.get("DB_PORT", 5432))
@@ -2176,6 +2196,90 @@ def _run_quiz_generate_job(db, payload):
         questions = pick_quiz_questions(mission["area"], mission["goal"], n=n, seed=mission_id)
         source = "banco_estatico" if questions else "indisponivel"
     _save_quiz_cache(db, mission_id, topic, source, questions)
+
+
+# ---------------------------------------------------------------------------
+# Painel de administracao (diagnostico das integracoes)
+# ---------------------------------------------------------------------------
+# Quem e admin vem de variavel de ambiente, nao de coluna no banco: nao existe
+# tela pra "promover" alguem, entao nao ha como um bug de permissao virar
+# escalonamento de privilegio. Trocar a lista exige acesso ao servidor.
+ADMIN_EMAILS = {
+    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+}
+
+
+def _current_account():
+    account_id = session.get("account_id")
+    if not account_id or session.get("is_guest"):
+        return None
+    return get_db().execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        account = _current_account()
+        email = (account["email"] or "").lower() if account else ""
+        if not email or email not in ADMIN_EMAILS:
+            # 404 em vez de 403: pra quem nao e admin, a rota simplesmente
+            # nao existe -- nao confirma que ha um painel aqui.
+            return render_template("404.html"), 404
+        return view(*args, **kwargs)
+    return wrapper
+
+
+@app.route("/admin", methods=["GET", "POST"])
+@admin_required
+def admin_panel():
+    db = get_db()
+
+    # As sondas fazem rede, entao so rodam quando o admin pede (POST).
+    probes = diagnostics.run_all() if request.method == "POST" else None
+
+    job_rows = db.execute(
+        "SELECT status, COUNT(*) total FROM jobs GROUP BY status"
+    ).fetchall()
+    jobs_por_status = {r["status"]: r["total"] for r in job_rows}
+    jobs_falhos = db.execute(
+        "SELECT id, job_type, attempts, error, updated_at FROM jobs "
+        "WHERE status='failed' ORDER BY id DESC LIMIT 10"
+    ).fetchall()
+
+    uso_ia = db.execute(
+        "SELECT provider, model, purpose, COUNT(*) chamadas, SUM(total_tokens) tokens, "
+        "SUM(cost_usd) custo, MAX(created_at) ultima "
+        "FROM ai_usage_log GROUP BY provider, model, purpose ORDER BY MAX(created_at) DESC LIMIT 20"
+    ).fetchall()
+
+    contas = db.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN is_guest=1 THEN 1 ELSE 0 END) convidados, "
+        "SUM(CASE WHEN ai_plan='paid' THEN 1 ELSE 0 END) pagantes FROM accounts"
+    ).fetchone()
+    builds = db.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN onboarding_complete=1 THEN 1 ELSE 0 END) completas "
+        "FROM users"
+    ).fetchone()
+    provas = db.execute(
+        "SELECT COUNT(*) total, SUM(CASE WHEN answered_at IS NOT NULL THEN 1 ELSE 0 END) respondidas "
+        "FROM weekly_exams"
+    ).fetchone()
+    quiz_fontes = db.execute(
+        "SELECT source, COUNT(*) total FROM ai_quiz_cache GROUP BY source ORDER BY COUNT(*) DESC"
+    ).fetchall()
+
+    return render_template(
+        "admin.html",
+        probes=probes,
+        config=diagnostics.config_overview(),
+        jobs_por_status=jobs_por_status,
+        jobs_falhos=jobs_falhos,
+        uso_ia=uso_ia,
+        contas=contas,
+        builds=builds,
+        provas=provas,
+        quiz_fontes=quiz_fontes,
+    )
 
 
 @app.route("/quiz/<int:mission_id>/regenerar", methods=["POST"])

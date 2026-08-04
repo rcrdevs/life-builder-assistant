@@ -7,6 +7,9 @@
     {% if not is_guest %}
     <a href="{{ url_for('builds_page') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Minhas builds</a>
     {% endif %}
+    {% if is_admin %}
+    <a href="{{ url_for('admin_panel') }}" class="lb-btn lb-btn--ghost lb-btn--sm">Diagnóstico</a>
+    {% endif %}
     <a href="{{ url_for('logout') }}" class="lb-btn lb-btn--ghost lb-btn--sm">{{ "Sair do teste" if is_guest else "Sair" }}</a>
 </div>
 {% endblock %}

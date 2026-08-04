@@ -1392,3 +1392,50 @@ input:focus, select:focus, textarea:focus, button:focus {
 .lb-ai-quota a:hover { text-decoration: underline; }
 .lb-ai-quota--exhausted { border-color: var(--warn); color: var(--warn); }
 .lb-ai-quota--exhausted a { color: var(--warn); }
+
+/* ---------- PAINEL DE ADMINISTRACAO (diagnostico) ---------- */
+.lb-admin-run { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 30px; }
+.lb-admin-run .lb-btn { align-self: auto; }
+.lb-admin-run .lb-hint { margin: 0; }
+
+.lb-admin-probes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 30px; }
+.lb-admin-probe {
+    border: 1px solid var(--line); border-left: 3px solid var(--line);
+    border-radius: var(--radius); background: var(--surface-2); padding: 12px 16px;
+}
+.lb-admin-probe__head { display: flex; align-items: baseline; gap: 10px; }
+.lb-admin-probe__status { font-family: var(--font-mono); font-size: 14px; }
+.lb-admin-probe__nome { font-size: 14px; color: var(--text); font-weight: 500; }
+.lb-admin-probe__detalhe { margin: 4px 0 0 24px; font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.lb-admin-probe__extra {
+    margin: 2px 0 0 24px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-dim);
+}
+.lb-admin-probe--ok { border-left-color: var(--ok); }
+.lb-admin-probe--ok .lb-admin-probe__status { color: var(--ok); }
+.lb-admin-probe--erro { border-left-color: var(--alert); }
+.lb-admin-probe--erro .lb-admin-probe__status { color: var(--alert); }
+.lb-admin-probe--off { border-left-color: var(--line); }
+.lb-admin-probe--off .lb-admin-probe__status { color: var(--text-dim); }
+
+.lb-admin-table-wrap { overflow-x: auto; margin-bottom: 30px; border: 1px solid var(--line); border-radius: var(--radius); }
+.lb-admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lb-admin-table th, .lb-admin-table td {
+    text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top;
+}
+.lb-admin-table thead th {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-dim); background: var(--surface-2); white-space: nowrap;
+}
+.lb-admin-table tbody tr:last-child td { border-bottom: none; }
+.lb-admin-table td { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.lb-admin-table code { font-family: var(--font-mono); font-size: 11.5px; color: var(--chrome-bright); }
+.lb-admin-yes { color: var(--ok); }
+.lb-admin-no { color: var(--text-dim); }
+.lb-admin-erro { color: var(--alert); word-break: break-word; }
+
+.lb-admin-counts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 30px; }
+.lb-admin-count {
+    font-size: 12.5px; color: var(--text-dim);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
+}
+.lb-admin-count strong { color: var(--neon-bright); font-family: var(--font-mono); }
