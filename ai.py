@@ -17,10 +17,52 @@ import unicodedata
 import urllib.request
 import urllib.error
 
+# ---------------------------------------------------------------------------
+# PROVEDORES
+#
+# Todos falam o mesmo dialeto (Chat Completions no formato OpenAI), entao
+# trocar de provedor e so mudar variavel de ambiente -- nao ha codigo especifico
+# de fornecedor em lugar nenhum aqui.
+#
+# A ordem de PROVIDERS e a ordem de tentativa: o primeiro que estiver
+# configurado E responder ganha. Isso existe porque falha de provedor aconteceu
+# de verdade em producao (conta sem saldo derrubou toda a geracao de quiz em
+# silencio) -- com a lista, um provedor fora do ar so custa um round-trip.
+#
+# Por que OpenRouter na frente: uma chave da acesso a praticamente qualquer
+# modelo (a qualidade do conteudo gerado e o gargalo hoje, nao a velocidade --
+# desde que as chamadas de IA foram pra fila em background, ninguem espera por
+# elas) e, ao contrario de free tiers que treinam com o que recebem, ele nao
+# loga prompt por padrao. Isso importa: o resumo enviado inclui dado pessoal do
+# usuario (lesao, religiao, anotacoes livres).
+# Groq fica como rede de seguranca gratuita.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-flash")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
 TIMEOUT_SECONDS = 12
+
+
+def providers():
+    """Provedores configurados, na ordem de tentativa. Lista vazia = sem IA,
+    e todo recurso de IA cai no fallback deterministico."""
+    todos = [
+        {"nome": "openrouter", "url": OPENROUTER_URL, "key": OPENROUTER_API_KEY, "model": OPENROUTER_MODEL},
+        {"nome": "groq", "url": GROQ_URL, "key": GROQ_API_KEY, "model": GROQ_MODEL},
+    ]
+    return [p for p in todos if p["key"]]
+
+
+def model_for(nome_provedor):
+    """Modelo em uso por provedor -- pro registro de consumo de tokens."""
+    for p in providers():
+        if p["nome"] == nome_provedor:
+            return p["model"]
+    return nome_provedor
 
 # ATENCAO -- nao remova o User-Agent das chamadas abaixo.
 # A Groq fica atras da Cloudflare, que BLOQUEIA o User-Agent padrao do urllib
@@ -76,21 +118,8 @@ def _post_json(url, api_key, payload, timeout):
 # de espaco -- ainda uma fracao de centavo por chamada no preco da Groq.
 MAX_TOKENS = 420
 
-# DeepSeek gera as questoes de quiz personalizadas por tema (missoes tipo
-# "concurso"/estudo com um assunto especifico digitado pelo usuario). Usamos
-# DeepSeek em vez da Groq aqui por ter uma camada gratuita mais generosa para
-# esse tipo de chamada JSON maior/estruturada; a nota de estrategia continua
-# na Groq. Ambas seguem o mesmo principio: recurso opcional, com fallback
-# silencioso se a chave nao estiver configurada ou a chamada falhar.
-#
-# ATENCAO: os aliases legados "deepseek-chat"/"deepseek-reasoner" foram
-# DESATIVADOS pela DeepSeek em 24/jul/2026 -- chamadas com esses nomes agora
-# retornam erro. O nome atual e "deepseek-v4-flash" (modo non-thinking, que e
-# o equivalente ao antigo deepseek-chat). Configuravel via env var caso a
-# DeepSeek troque os nomes de novo no futuro.
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+# Geracao de quiz: JSON maior e mais estruturado que a nota de estrategia,
+# entao timeout e teto de tokens maiores. Usa a mesma lista de PROVIDERS.
 QUIZ_TIMEOUT_SECONDS = 25
 QUIZ_MAX_TOKENS = 2200
 
@@ -124,9 +153,8 @@ QUIZ_SYSTEM_PROMPT = (
 
 
 def quiz_ai_available():
-    """Quiz por IA funciona com QUALQUER um dos dois provedores configurados --
-    ver generate_quiz_questions para a ordem de tentativa."""
-    return bool(DEEPSEEK_API_KEY or GROQ_API_KEY)
+    """Basta UM provedor configurado -- ver providers() pra ordem de tentativa."""
+    return bool(providers())
 
 
 def _parse_quiz_response(data):
@@ -166,12 +194,12 @@ def _parse_quiz_response(data):
 def generate_quiz_questions(topic, n=10, extra_instrucao=None):
     """Gera `n` questoes de multipla escolha sobre `topic`.
 
-    Tenta a DeepSeek primeiro (camada gratuita mais generosa pra JSON grande) e
-    cai pra Groq se ela falhar. Esse fallback existe porque falha de provedor
-    aconteceu de verdade em producao: a conta DeepSeek ficou sem saldo (HTTP 402)
-    e, como o app engole erro de IA em silencio, TODO quiz passou a cair no banco
-    estatico generico -- o usuario digitava "TI da Caixa" e recebia questoes
-    aleatorias de portugues e direito constitucional, sem nenhum aviso.
+    Percorre providers() na ordem e devolve a primeira resposta valida. Esse
+    encadeamento existe porque falha de provedor aconteceu de verdade em
+    producao: a conta de um deles ficou sem saldo (HTTP 402) e, como o app
+    engole erro de IA em silencio, TODO quiz passou a cair no banco estatico --
+    o usuario digitava "TI da Caixa" e recebia questoes aleatorias de portugues
+    e direito constitucional, sem nenhum aviso.
 
     Retorna (questions, usage, provedor). `questions` e None se nenhum provedor
     respondeu -- ai quem chamou deve usar o banco estatico.
@@ -190,37 +218,25 @@ def generate_quiz_questions(topic, n=10, extra_instrucao=None):
         {"role": "user", "content": user_prompt},
     ]
 
-    tentativas = []
-    if DEEPSEEK_API_KEY:
-        tentativas.append(("deepseek", DEEPSEEK_URL, DEEPSEEK_API_KEY, {
-            "model": DEEPSEEK_MODEL, "messages": messages,
+    for p in providers():
+        data = _post_json(p["url"], p["key"], {
+            "model": p["model"], "messages": messages,
             "max_tokens": QUIZ_MAX_TOKENS, "temperature": 0.6,
             "response_format": {"type": "json_object"},
-            # sem tokens de raciocinio extra: queremos o JSON direto
-            "thinking": {"type": "disabled"},
-        }))
-    if GROQ_API_KEY:
-        tentativas.append(("groq", GROQ_URL, GROQ_API_KEY, {
-            "model": GROQ_MODEL, "messages": messages,
-            "max_tokens": QUIZ_MAX_TOKENS, "temperature": 0.6,
-            "response_format": {"type": "json_object"},
-        }))
-
-    for provedor, url, chave, payload in tentativas:
-        data = _post_json(url, chave, payload, QUIZ_TIMEOUT_SECONDS)
+        }, QUIZ_TIMEOUT_SECONDS)
         if data is None:
             continue
         questions = _parse_quiz_response(data)
         if questions:
-            return questions, data.get("usage"), provedor
-        print(f"[ai] {provedor} respondeu, mas sem questoes validas -- tentando o proximo provedor")
+            return questions, data.get("usage"), p["nome"]
+        print(f"[ai] {p['nome']} respondeu, mas sem questoes validas -- tentando o proximo provedor")
 
     return None, None, None
 
 
 def quiz_model_for(provedor):
-    """Nome do modelo usado por provedor -- pro registro de consumo de tokens."""
-    return DEEPSEEK_MODEL if provedor == "deepseek" else GROQ_MODEL
+    """Compatibilidade: mesma coisa que model_for()."""
+    return model_for(provedor)
 
 # Nota de estrategia: 1 chamada Groq por ciclo (14 dias) por conta -- nunca por
 # missao/dia. Para dar a sensacao real de "IA que acompanha a evolucao" sem
@@ -249,7 +265,7 @@ STRATEGY_SYSTEM_PROMPT = (
 
 
 def ai_available():
-    return bool(GROQ_API_KEY)
+    return bool(providers())
 
 
 def build_profile_summary(user, area_label_fn, area_goals_label_fn, history=None):
@@ -311,32 +327,39 @@ def build_profile_summary(user, area_label_fn, area_goals_label_fn, history=None
 
 
 def generate_strategy_note(profile_summary, area_keys):
-    """Retorna uma tupla (notes, usage). `notes` e um dict {area_key: texto}
-    com uma nota curta por area ativa, ou None se a IA nao estiver
-    disponivel/configurada, `area_keys` vier vazio, ou a chamada falhar (o
-    app segue funcionando normalmente sem essas notas em qualquer um desses
-    casos). `usage` e o dict de tokens da API (ou None se a chamada nao
-    chegou a acontecer/retornar)."""
-    if not GROQ_API_KEY or not profile_summary or not area_keys:
-        return None, None
+    """Retorna uma tupla (notes, usage, provedor). `notes` e um dict
+    {area_key: texto} com uma nota curta por area ativa, ou None se nenhum
+    provedor respondeu, `area_keys` vier vazio, ou a resposta nao vier
+    utilizavel -- o app segue funcionando normalmente sem essas notas em
+    qualquer um desses casos.
 
-    data = _post_json(GROQ_URL, GROQ_API_KEY, {
-        "model": GROQ_MODEL,
-        "messages": [
-            {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
-            {"role": "user", "content": profile_summary},
-        ],
-        "max_tokens": MAX_TOKENS,
-        "temperature": 0.6,
-        "response_format": {"type": "json_object"},
-    }, TIMEOUT_SECONDS)
+    Percorre providers() igual ao quiz: antes isso estava preso a um provedor
+    so, entao qualquer problema com ele derrubava a nota inteira."""
+    if not profile_summary or not area_keys:
+        return None, None, None
+
+    data = provedor = None
+    for p in providers():
+        data = _post_json(p["url"], p["key"], {
+            "model": p["model"],
+            "messages": [
+                {"role": "system", "content": STRATEGY_SYSTEM_PROMPT},
+                {"role": "user", "content": profile_summary},
+            ],
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.6,
+            "response_format": {"type": "json_object"},
+        }, TIMEOUT_SECONDS)
+        if data is not None:
+            provedor = p["nome"]
+            break
     if data is None:
-        return None, None
+        return None, None, None
 
     try:
         parsed = json.loads(data["choices"][0]["message"]["content"].strip())
         if not isinstance(parsed, dict):
-            return None, data.get("usage")
+            return None, data.get("usage"), provedor
 
         # O modelo tende a devolver a chave como aparece no resumo, que usa o
         # rotulo de exibicao ("Espiritualidade", "Saude"), e nao a chave interna
@@ -349,6 +372,6 @@ def generate_strategy_note(profile_summary, area_keys):
             area = por_normalizada.get(_normalize_area_key(chave_bruta))
             if area and isinstance(texto, str) and texto.strip():
                 notes[area] = texto.strip()
-        return (notes or None), data.get("usage")
+        return (notes or None), data.get("usage"), provedor
     except (KeyError, IndexError, ValueError, TypeError, AttributeError):
-        return None, data.get("usage")
+        return None, data.get("usage"), provedor

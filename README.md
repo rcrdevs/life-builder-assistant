@@ -5,7 +5,7 @@ Estudos, Saúde e Espiritualidade** — onde você pode escolher **mais de um
 objetivo por área**, detalhar objetivos específicos (qual concurso, qual idioma...),
 resolver simulados dentro do próprio app, e receber recomendações com links reais
 de compra/vídeo/evento. Ao fim de cada ciclo de 14 dias, o app pergunta como você
-*sente* que foi seu progresso e recalibra o ciclo seguinte. Opcionalmente, a Groq
+*sente* que foi seu progresso e recalibra o ciclo seguinte. Opcionalmente, a IA
 gera uma nota de estratégia por área a cada ciclo, já considerando o histórico
 (adesão, autoavaliação, desempenho em quiz) do ciclo anterior.
 
@@ -17,7 +17,7 @@ gera uma nota de estratégia por área a cada ciclo, já considerando o históri
 cd life_builder
 cp .env.example .env
 # edite o .env: defina pelo menos SECRET_KEY (o arquivo explica como gerar uma).
-# GROQ_API_KEY e DEEPSEEK_API_KEY são opcionais — sem elas o app funciona
+# OPENROUTER_API_KEY / GROQ_API_KEY são opcionais — sem elas o app funciona
 # normalmente, só sem a nota de estratégia por IA e sem quiz personalizado por tema.
 docker compose up -d --build
 ```
@@ -56,7 +56,7 @@ fallback (mostram a chave crua) em vez de quebrar a página, mas o ideal é
 recriar a build nessas contas.
 
 ### 2. IA estruturada por área, sem aumentar o custo por chamada
-A nota de estratégia (Groq, `ai.generate_strategy_note`) continua sendo **1
+A nota de estratégia (`ai.generate_strategy_note`) continua sendo **1
 chamada por ciclo de 14 dias por conta** — não por missão, não por dia — pra
 manter o teste grátis (`FREE_TRIAL_AI_TOKENS`, ver `ai_billing.py`) viável.
 O que mudou é o conteúdo dessa chamada: agora ela recebe o histórico do ciclo
@@ -66,8 +66,7 @@ montado por `app._build_ai_history`) e devolve uma nota curta **por área
 ativa** em JSON, em vez de um parágrafo único e genérico. O dashboard mostra
 essa nota junto de cada área.
 
-O quiz por IA (DeepSeek, já existia para `profissional/concurso`) foi
-estendido para `estudos/idioma` reaproveitando 100% da infraestrutura
+O quiz por IA foi estendido para `estudos/idioma` reaproveitando 100% da infraestrutura
 existente (`ai.generate_quiz_questions`, cache em `ai_quiz_cache`) — só
 adicionou `action: "quiz:5"` numa mission template. Saúde e Espiritualidade
 não ganharam quiz de propósito: não fazem sentido em múltipla escolha, e
@@ -103,8 +102,8 @@ tabela nova.
   chamada de IA — tudo determinístico.
 - `ai.py` — `build_profile_summary` (agora aceita `history` opcional) e
   `generate_strategy_note` (agora devolve um dict `{area: nota}`, pedindo
-  saída em JSON à Groq) para a nota de estratégia; `generate_quiz_questions`
-  (DeepSeek) para o quiz gerado por IA.
+  saída em JSON) para a nota de estratégia; `generate_quiz_questions` para o
+  quiz. Ambos percorrem `providers()` -- ver "Provedores de IA" abaixo.
 - `app.py` — `_build_ai_history` monta o histórico do ciclo anterior por
   área; `_update_ai_strategy` chama a IA e salva o dict em
   `extra_info["ai_strategy"]`. Rotas de quiz: `/quiz/<mission_id>` (GET
@@ -112,6 +111,33 @@ tabela nova.
 - `learner_context.py` — ponto de extensão (não roteado) para a futura
   integração com o gerador de cursos.
 - `templates/quiz.html`, `templates/quiz_result.html` — telas do simulado.
+
+## Provedores de IA
+
+Quiz por tema, prova semanal e nota de estratégia usam uma **lista de
+provedores tentados em ordem** (`ai.providers()`), todos falando o mesmo
+dialeto (Chat Completions no formato OpenAI). Trocar de provedor é só variável
+de ambiente — não há código específico de fornecedor.
+
+1. **OpenRouter** (`OPENROUTER_API_KEY`) — primário. Uma chave dá acesso a
+   praticamente qualquer modelo, e ele **não loga prompt por padrão**, o que
+   importa aqui: o resumo enviado inclui dado pessoal (lesão, religião,
+   anotações livres). Sem markup na inferência; a taxa é na compra de crédito.
+2. **Groq** (`GROQ_API_KEY`) — fallback gratuito.
+
+Sem nenhum configurado, o app roda normal: missões, pontos e progressão são
+determinísticos e nunca dependem de IA.
+
+**Por que o encadeamento existe**: falha de provedor aconteceu de verdade em
+produção. Uma conta ficou sem saldo (HTTP 402) e, como o app engole erro de IA
+em silêncio de propósito, todo quiz passou a cair no banco estático genérico —
+o usuário digitava "TI da Caixa" e recebia questões aleatórias de português,
+sem nenhum aviso. Hoje há três defesas: o encadeamento, o aviso visível na tela
+do quiz quando as questões são genéricas, e o painel `/admin`, que testa ao
+vivo se cada provedor responde.
+
+**Nota histórica**: a DeepSeek foi removida — ela não tem cota gratuita
+recorrente (só crédito pré-pago), e o crédito promocional acabou.
 
 ## Limitações conhecidas / próximos passos sugeridos
 

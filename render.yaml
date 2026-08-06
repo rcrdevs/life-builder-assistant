@@ -23,10 +23,10 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
-      - key: DEEPSEEK_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: DEEPSEEK_MODEL
-        value: deepseek-chat  # so e usado se DEEPSEEK_API_KEY tiver saldo; senao cai pra Groq
+      - key: OPENROUTER_MODEL
+        value: google/gemini-2.5-flash
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: YOUTUBE_API_KEY

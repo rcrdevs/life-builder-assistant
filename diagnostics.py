@@ -74,29 +74,32 @@ def _probe_chat_completions(nome, url, api_key, model):
         return _resultado(False, f"falha de rede: {e!r}")
 
 
-def probe_groq():
-    return _probe_chat_completions("groq", ai.GROQ_URL, ai.GROQ_API_KEY, ai.GROQ_MODEL)
-
-
-def probe_deepseek():
-    """Alem do ping, consulta o saldo -- 'sem saldo' e o modo de falha real
-    dessa API (ela nao tem cota gratuita recorrente, so credito pre-pago)."""
-    base = _probe_chat_completions("deepseek", ai.DEEPSEEK_URL, ai.DEEPSEEK_API_KEY, ai.DEEPSEEK_MODEL)
-    if not ai.DEEPSEEK_API_KEY:
+def probe_openrouter():
+    """Alem do ping, consulta o credito -- 'sem saldo' e o modo de falha tipico
+    de provedor pre-pago, e foi exatamente o que derrubou a geracao de quiz em
+    producao antes (numa outra API, mas o mesmo tipo de falha)."""
+    base = _probe_chat_completions(
+        "openrouter", ai.OPENROUTER_URL, ai.OPENROUTER_API_KEY, ai.OPENROUTER_MODEL)
+    if not ai.OPENROUTER_API_KEY:
         return base
     req = urllib.request.Request(
-        "https://api.deepseek.com/user/balance",
-        headers=ai._auth_headers(ai.DEEPSEEK_API_KEY),
+        "https://openrouter.ai/api/v1/credits",
+        headers=ai._auth_headers(ai.OPENROUTER_API_KEY),
     )
     try:
         with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        info = (data.get("balance_infos") or [{}])[0]
-        base["saldo"] = f"{info.get('currency', '')} {info.get('total_balance', '?')}".strip()
-        base["saldo_disponivel"] = bool(data.get("is_available"))
+            info = (json.loads(resp.read().decode("utf-8")) or {}).get("data") or {}
+        comprado = float(info.get("total_credits") or 0)
+        usado = float(info.get("total_usage") or 0)
+        base["saldo"] = f"US$ {comprado - usado:.2f} restantes (de US$ {comprado:.2f})"
+        base["saldo_disponivel"] = (comprado - usado) > 0
     except Exception:
         pass
     return base
+
+
+def probe_groq():
+    return _probe_chat_completions("groq", ai.GROQ_URL, ai.GROQ_API_KEY, ai.GROQ_MODEL)
 
 
 def probe_youtube():
@@ -142,8 +145,8 @@ def probe_stripe():
 # Ordem importa: e a ordem em que aparecem no painel, das mais criticas
 # (geram conteudo pro usuario) pras acessorias.
 PROBES = [
-    ("Groq (quiz + nota de estratégia)", probe_groq),
-    ("DeepSeek (quiz, opcional)", probe_deepseek),
+    ("OpenRouter (primário — quiz, prova e nota)", probe_openrouter),
+    ("Groq (fallback gratuito)", probe_groq),
     ("YouTube Data API (vídeos)", probe_youtube),
     ("SMTP (recuperação de senha)", probe_smtp),
     ("Stripe (assinaturas)", probe_stripe),
@@ -160,8 +163,8 @@ def config_overview():
     """Estado de configuracao SEM tocar na rede -- serve pra pagina abrir
     rapido, antes de o admin pedir o teste ao vivo."""
     return [
+        ("OPENROUTER_API_KEY", bool(ai.OPENROUTER_API_KEY), ai.OPENROUTER_MODEL),
         ("GROQ_API_KEY", bool(ai.GROQ_API_KEY), ai.GROQ_MODEL),
-        ("DEEPSEEK_API_KEY", bool(ai.DEEPSEEK_API_KEY), ai.DEEPSEEK_MODEL),
         ("YOUTUBE_API_KEY", youtube_api.youtube_available(), "—"),
         ("SMTP_HOST", email_sender.email_available(), email_sender.SMTP_HOST or "—"),
         ("STRIPE_SECRET_KEY", billing.billing_available(), "—"),

@@ -1476,9 +1476,10 @@ def _update_ai_strategy(db, user, account_id):
         return
     history = _build_ai_history(db, user)
     summary = ai.build_profile_summary(user, area_label, area_goals_label, history=history)
-    notes, usage = ai.generate_strategy_note(summary, user["areas"])
-    if usage:
-        ai_billing.record_usage(db, account_id, user["id"], "groq", ai.GROQ_MODEL, "strategy_note", usage)
+    notes, usage, provedor = ai.generate_strategy_note(summary, user["areas"])
+    if usage and provedor:
+        ai_billing.record_usage(db, account_id, user["id"], provedor,
+                                ai.model_for(provedor), "strategy_note", usage)
     if notes:
         extra_info = dict(user["extra_info"])
         extra_info["ai_strategy"] = notes

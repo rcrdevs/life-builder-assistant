@@ -46,18 +46,19 @@ QUOTA_SAFETY_MARGIN = 2_500
 # pricing, se/quando o provedor oferecer uma) antes de usar como base direta
 # de cobranca.
 PROVIDER_PRICING = {
-    # Groq -- llama-3.1-8b-instant (usado em ai.generate_strategy_note)
-    "groq": {"input_per_m": 0.05, "output_per_m": 0.08},
-    # DeepSeek -- deepseek-v4-flash, modo non-thinking (usado em
-    # ai.generate_quiz_questions). deepseek-chat foi desativado em
-    # 24/jul/2026 -- ver nota em ai.py.
-    "deepseek": {"input_per_m": 0.14, "output_per_m": 0.28},
+    # OpenRouter repassa o preco do modelo escolhido sem markup na inferencia
+    # (a taxa dele e na compra de credito). Estes numeros sao do padrao
+    # OPENROUTER_MODEL (google/gemini-2.5-flash); se trocar o modelo, ajuste
+    # aqui -- senao o custo estimado no painel fica errado.
+    "openrouter": {"input_per_m": 0.30, "output_per_m": 2.50},
+    # Groq -- llama-3.3-70b-versatile
+    "groq": {"input_per_m": 0.59, "output_per_m": 0.79},
 }
 
 
 def estimate_cost_usd(provider, usage):
     """usage: dict com prompt_tokens/completion_tokens (formato OpenAI-compatible,
-    devolvido tanto pela Groq quanto pela DeepSeek). Retorna custo estimado em USD."""
+    devolvido por qualquer provedor OpenAI-compatible). Retorna custo estimado em USD."""
     pricing = PROVIDER_PRICING.get(provider)
     if not pricing or not usage:
         return 0.0
